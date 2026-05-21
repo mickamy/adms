@@ -237,7 +237,7 @@ func mysqlScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) (
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 
-		key := linkedSchema + "." + cname
+		key := linkedSchema + "\x00" + cname
 
 		fk, ok := byName[key]
 		if !ok {
@@ -263,6 +263,10 @@ func mysqlScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) (
 }
 
 func mysqlInPlaceholders(values []string) (string, []any) {
+	if len(values) == 0 {
+		return "", nil
+	}
+
 	args := make([]any, len(values))
 	for i, v := range values {
 		args[i] = v
