@@ -68,6 +68,10 @@ func mysqlCurrentSchema(ctx context.Context, db *sql.DB) (string, error) {
 }
 
 func mysqlListTables(ctx context.Context, db *sql.DB, schemas []string) ([]Table, error) {
+	if len(schemas) == 0 {
+		return nil, nil
+	}
+
 	placeholders, args := mysqlInPlaceholders(schemas)
 	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
 	query := `
