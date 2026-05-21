@@ -27,28 +27,25 @@ func (mysqlIntrospector) Introspect(ctx context.Context, db *sql.DB, allowedSche
 		return Schema{}, fmt.Errorf("list tables: %w", err)
 	}
 
+	index := make(map[tableKey]*Table, len(tables))
 	for i := range tables {
-		t := &tables[i]
+		index[tableKey{tables[i].Schema, tables[i].Name}] = &tables[i]
+	}
 
-		t.Columns, err = mysqlListColumns(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list columns for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := mysqlAttachColumns(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach columns: %w", err)
+	}
 
-		t.PrimaryKey, err = mysqlListPrimaryKey(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list pk for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := mysqlAttachPrimaryKeys(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach primary keys: %w", err)
+	}
 
-		t.ForeignKeys, err = mysqlListForeignKeys(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list fks for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := mysqlAttachForeignKeys(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach foreign keys: %w", err)
+	}
 
-		t.ReferencedBy, err = mysqlListReferencedBy(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list referenced_by for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := mysqlAttachReferencedBy(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach referenced_by: %w", err)
 	}
 
 	return Schema{Tables: tables}, nil
@@ -106,9 +103,17 @@ func mysqlListTables(ctx context.Context, db *sql.DB, schemas []string) ([]Table
 	return tables, nil
 }
 
-func mysqlListColumns(ctx context.Context, db *sql.DB, schema, name string) ([]Column, error) {
-	const query = `
+func mysqlAttachColumns(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
+	if len(schemas) == 0 {
+		return nil
+	}
+
+	placeholders, args := mysqlInPlaceholders(schemas)
+	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
+	query := `
 		SELECT
+			table_schema,
+			table_name,
 			column_name,
 			column_type,
 			is_nullable,
@@ -116,28 +121,26 @@ func mysqlListColumns(ctx context.Context, db *sql.DB, schema, name string) ([]C
 			extra,
 			column_comment
 		FROM information_schema.columns
-		WHERE table_schema = ? AND table_name = ?
-		ORDER BY ordinal_position
+		WHERE table_schema IN (` + placeholders + `)
+		ORDER BY table_schema, table_name, ordinal_position
 	`
 
-	rows, err := db.QueryContext(ctx, query, schema, name)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
+		return fmt.Errorf("query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var cols []Column
-
 	for rows.Next() {
 		var (
-			c        Column
-			nullable string
-			def      sql.NullString
-			extra    string
+			schemaName, tableName string
+			c                     Column
+			nullable, extra       string
+			def                   sql.NullString
 		)
 
-		if err := rows.Scan(&c.Name, &c.Type, &nullable, &def, &extra, &c.Comment); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+		if err := rows.Scan(&schemaName, &tableName, &c.Name, &c.Type, &nullable, &def, &extra, &c.Comment); err != nil {
+			return fmt.Errorf("scan: %w", err)
 		}
 
 		c.Nullable = strings.EqualFold(nullable, "YES")
@@ -149,51 +152,68 @@ func mysqlListColumns(ctx context.Context, db *sql.DB, schema, name string) ([]C
 		c.IsGenerated = strings.Contains(upper, "VIRTUAL GENERATED") || strings.Contains(upper, "STORED GENERATED")
 		c.IsIdentity = strings.Contains(upper, "AUTO_INCREMENT")
 
-		cols = append(cols, c)
+		if t, ok := index[tableKey{schemaName, tableName}]; ok {
+			t.Columns = append(t.Columns, c)
+		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows: %w", err)
+		return fmt.Errorf("rows: %w", err)
 	}
 
-	return cols, nil
+	return nil
 }
 
-func mysqlListPrimaryKey(ctx context.Context, db *sql.DB, schema, name string) ([]string, error) {
-	const query = `
-		SELECT column_name
+func mysqlAttachPrimaryKeys(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
+	if len(schemas) == 0 {
+		return nil
+	}
+
+	placeholders, args := mysqlInPlaceholders(schemas)
+	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
+	query := `
+		SELECT table_schema, table_name, column_name
 		FROM information_schema.key_column_usage
-		WHERE table_schema = ? AND table_name = ? AND constraint_name = 'PRIMARY'
-		ORDER BY ordinal_position
+		WHERE constraint_name = 'PRIMARY'
+		  AND table_schema IN (` + placeholders + `)
+		ORDER BY table_schema, table_name, ordinal_position
 	`
 
-	rows, err := db.QueryContext(ctx, query, schema, name)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
+		return fmt.Errorf("query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var pk []string
-
 	for rows.Next() {
-		var col string
-		if err := rows.Scan(&col); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+		var schemaName, tableName, col string
+		if err := rows.Scan(&schemaName, &tableName, &col); err != nil {
+			return fmt.Errorf("scan: %w", err)
 		}
 
-		pk = append(pk, col)
+		if t, ok := index[tableKey{schemaName, tableName}]; ok {
+			t.PrimaryKey = append(t.PrimaryKey, col)
+		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows: %w", err)
+		return fmt.Errorf("rows: %w", err)
 	}
 
-	return pk, nil
+	return nil
 }
 
-func mysqlListForeignKeys(ctx context.Context, db *sql.DB, schema, name string) ([]ForeignKey, error) {
-	const query = `
+func mysqlAttachForeignKeys(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
+	if len(schemas) == 0 {
+		return nil
+	}
+
+	placeholders, args := mysqlInPlaceholders(schemas)
+	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
+	query := `
 		SELECT
+			table_schema,
+			table_name,
 			constraint_name,
 			referenced_table_schema,
 			referenced_table_name,
@@ -201,16 +221,25 @@ func mysqlListForeignKeys(ctx context.Context, db *sql.DB, schema, name string) 
 			referenced_column_name,
 			ordinal_position
 		FROM information_schema.key_column_usage
-		WHERE table_schema = ? AND table_name = ? AND referenced_table_name IS NOT NULL
-		ORDER BY constraint_name, ordinal_position
+		WHERE referenced_table_name IS NOT NULL
+		  AND table_schema IN (` + placeholders + `)
+		ORDER BY table_schema, table_name, constraint_name, ordinal_position
 	`
 
-	return mysqlScanFKs(ctx, db, query, schema, name)
+	return mysqlAttachFKs(ctx, db, query, args, index, fkDirectionForward)
 }
 
-func mysqlListReferencedBy(ctx context.Context, db *sql.DB, schema, name string) ([]ForeignKey, error) {
-	const query = `
+func mysqlAttachReferencedBy(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
+	if len(schemas) == 0 {
+		return nil
+	}
+
+	placeholders, args := mysqlInPlaceholders(schemas)
+	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
+	query := `
 		SELECT
+			referenced_table_schema,
+			referenced_table_name,
 			constraint_name,
 			table_schema,
 			table_name,
@@ -218,58 +247,82 @@ func mysqlListReferencedBy(ctx context.Context, db *sql.DB, schema, name string)
 			referenced_column_name,
 			ordinal_position
 		FROM information_schema.key_column_usage
-		WHERE referenced_table_schema = ? AND referenced_table_name = ?
-		ORDER BY constraint_name, ordinal_position
+		WHERE referenced_table_name IS NOT NULL
+		  AND referenced_table_schema IN (` + placeholders + `)
+		ORDER BY referenced_table_schema, referenced_table_name, constraint_name, ordinal_position
 	`
 
-	return mysqlScanFKs(ctx, db, query, schema, name)
+	return mysqlAttachFKs(ctx, db, query, args, index, fkDirectionReverse)
 }
 
-func mysqlScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) ([]ForeignKey, error) {
-	rows, err := db.QueryContext(ctx, query, schema, name)
+func mysqlAttachFKs(ctx context.Context, db *sql.DB, query string, args []any,
+	index map[tableKey]*Table, direction fkDirection,
+) error {
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
+		return fmt.Errorf("query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var (
-		order  []string
-		byName = make(map[string]*ForeignKey)
-	)
+	type ownerKey struct {
+		schema, name, conname string
+	}
+
+	type fkAccum struct {
+		owner tableKey
+		fk    *ForeignKey
+	}
+
+	accum := make(map[ownerKey]*fkAccum)
+	order := make([]ownerKey, 0)
 
 	for rows.Next() {
 		var (
-			cname, linkedSchema, linkedName, col, refCol string
-			ord                                          int
+			ownerSchema, ownerName, cname, linkedSchema, linkedName, col, refCol string
+			ord                                                                  int
 		)
 
-		if err := rows.Scan(&cname, &linkedSchema, &linkedName, &col, &refCol, &ord); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+		if err := rows.Scan(&ownerSchema, &ownerName, &cname,
+			&linkedSchema, &linkedName, &col, &refCol, &ord); err != nil {
+			return fmt.Errorf("scan: %w", err)
 		}
 
-		key := linkedSchema + "\x00" + cname
-
-		fk, ok := byName[key]
-		if !ok {
-			fk = &ForeignKey{Table: mysqlQualify(linkedSchema, linkedName)}
-			byName[key] = fk
+		key := ownerKey{ownerSchema, ownerName, cname}
+		entry, exists := accum[key]
+		if !exists {
+			entry = &fkAccum{
+				owner: tableKey{ownerSchema, ownerName},
+				fk:    &ForeignKey{Table: mysqlQualify(linkedSchema, linkedName)},
+			}
+			accum[key] = entry
 			order = append(order, key)
 		}
 
-		fk.Columns = append(fk.Columns, col)
-		fk.References = append(fk.References, refCol)
+		entry.fk.Columns = append(entry.fk.Columns, col)
+		entry.fk.References = append(entry.fk.References, refCol)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows: %w", err)
+		return fmt.Errorf("rows: %w", err)
 	}
 
-	out := make([]ForeignKey, 0, len(order))
-	for _, k := range order {
-		out = append(out, *byName[k])
+	for _, key := range order {
+		entry := accum[key]
+
+		t, found := index[entry.owner]
+		if !found {
+			continue
+		}
+
+		switch direction {
+		case fkDirectionForward:
+			t.ForeignKeys = append(t.ForeignKeys, *entry.fk)
+		case fkDirectionReverse:
+			t.ReferencedBy = append(t.ReferencedBy, *entry.fk)
+		}
 	}
 
-	return out, nil
+	return nil
 }
 
 func mysqlInPlaceholders(values []string) (string, []any) {
