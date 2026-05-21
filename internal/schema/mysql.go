@@ -145,8 +145,9 @@ func mysqlListColumns(ctx context.Context, db *sql.DB, schema, name string) ([]C
 			c.Default = &def.String
 		}
 
-		c.IsGenerated = strings.Contains(strings.ToUpper(extra), "GENERATED")
-		c.IsIdentity = strings.Contains(strings.ToLower(extra), "auto_increment")
+		upper := strings.ToUpper(extra)
+		c.IsGenerated = strings.Contains(upper, "VIRTUAL GENERATED") || strings.Contains(upper, "STORED GENERATED")
+		c.IsIdentity = strings.Contains(upper, "AUTO_INCREMENT")
 
 		cols = append(cols, c)
 	}
