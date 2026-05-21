@@ -209,7 +209,6 @@ func mysqlAttachForeignKeys(ctx context.Context, db *sql.DB, schemas []string, i
 	}
 
 	placeholders, args := mysqlInPlaceholders(schemas)
-	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
 	query := `
 		SELECT
 			table_schema,
@@ -235,7 +234,6 @@ func mysqlAttachReferencedBy(ctx context.Context, db *sql.DB, schemas []string, 
 	}
 
 	placeholders, args := mysqlInPlaceholders(schemas)
-	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
 	query := `
 		SELECT
 			referenced_table_schema,
