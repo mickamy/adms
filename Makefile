@@ -37,10 +37,9 @@ test:
 	go test ./... -race
 
 test-integration:
-	docker compose up -d --wait
-	go test -tags=integration ./... -race; status=$$?; \
-		docker compose down; \
-		exit $$status
+	@trap 'docker compose down' EXIT; \
+		docker compose up -d --wait && \
+		go test -tags=integration ./... -race
 
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { \
