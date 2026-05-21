@@ -20,9 +20,9 @@ type Config struct {
 
 // Parse resolves CLI flags and ADMS_* environment variables into a Config.
 // Flag values win over environment values when both are set.
-func Parse(args []string, stderr io.Writer) (Config, error) {
+func Parse(args []string) (Config, error) {
 	fs := flag.NewFlagSet("adms", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	fs.SetOutput(io.Discard)
 
 	driver := fs.String("driver", os.Getenv("ADMS_DRIVER"), "DB driver (postgres or mysql)")
 	dsn := fs.String("dsn", os.Getenv("ADMS_DSN"), "DB connection string")

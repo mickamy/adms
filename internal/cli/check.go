@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"sort"
@@ -14,8 +16,12 @@ import (
 )
 
 func check(args []string, stdout, stderr io.Writer) int {
-	cfg, err := config.Parse(args, stderr)
+	cfg, err := config.Parse(args)
 	if err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return exit.OK
+		}
+
 		fmt.Fprintf(stderr, "adms check: %v\n", err)
 
 		return exit.Usage
