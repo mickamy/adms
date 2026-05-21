@@ -240,65 +240,7 @@ func pgAttachFKs(ctx context.Context, db *sql.DB, query string, schemas []string
 	}
 	defer func() { _ = rows.Close() }()
 
-	type ownerKey struct {
-		schema, name, conname, linkedSchema, linkedName string
-	}
-
-	type fkAccum struct {
-		owner tableKey
-		fk    *ForeignKey
-	}
-
-	accum := make(map[ownerKey]*fkAccum)
-	order := make([]ownerKey, 0)
-
-	for rows.Next() {
-		var (
-			ownerSchema, ownerName, cname, linkedSchema, linkedName, col, refCol string
-			ord                                                                  int
-		)
-
-		if err := rows.Scan(&ownerSchema, &ownerName, &cname,
-			&linkedSchema, &linkedName, &col, &refCol, &ord); err != nil {
-			return fmt.Errorf("scan: %w", err)
-		}
-
-		key := ownerKey{ownerSchema, ownerName, cname, linkedSchema, linkedName}
-		entry, exists := accum[key]
-		if !exists {
-			entry = &fkAccum{
-				owner: tableKey{ownerSchema, ownerName},
-				fk:    &ForeignKey{Table: pgQualify(linkedSchema, linkedName)},
-			}
-			accum[key] = entry
-			order = append(order, key)
-		}
-
-		entry.fk.Columns = append(entry.fk.Columns, col)
-		entry.fk.References = append(entry.fk.References, refCol)
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("rows: %w", err)
-	}
-
-	for _, key := range order {
-		entry := accum[key]
-
-		t, found := index[entry.owner]
-		if !found {
-			continue
-		}
-
-		switch direction {
-		case fkDirectionForward:
-			t.ForeignKeys = append(t.ForeignKeys, *entry.fk)
-		case fkDirectionReverse:
-			t.ReferencedBy = append(t.ReferencedBy, *entry.fk)
-		}
-	}
-
-	return nil
+	return attachFKs(rows, pgQualify, index, direction)
 }
 
 func pgQualify(schema, name string) string {
