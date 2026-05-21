@@ -10,6 +10,11 @@ type postgresIntrospector struct{}
 
 func PostgresIntrospector() Introspector { return postgresIntrospector{} }
 
+type tableKey struct {
+	Schema string
+	Name   string
+}
+
 func (postgresIntrospector) Introspect(ctx context.Context, db *sql.DB, allowedSchemas []string) (Schema, error) {
 	if len(allowedSchemas) == 0 {
 		allowedSchemas = []string{"public"}
@@ -20,28 +25,25 @@ func (postgresIntrospector) Introspect(ctx context.Context, db *sql.DB, allowedS
 		return Schema{}, fmt.Errorf("list tables: %w", err)
 	}
 
+	index := make(map[tableKey]*Table, len(tables))
 	for i := range tables {
-		t := &tables[i]
+		index[tableKey{tables[i].Schema, tables[i].Name}] = &tables[i]
+	}
 
-		t.Columns, err = pgListColumns(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list columns for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := pgAttachColumns(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach columns: %w", err)
+	}
 
-		t.PrimaryKey, err = pgListPrimaryKey(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list pk for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := pgAttachPrimaryKeys(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach primary keys: %w", err)
+	}
 
-		t.ForeignKeys, err = pgListForeignKeys(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list fks for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := pgAttachForeignKeys(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach foreign keys: %w", err)
+	}
 
-		t.ReferencedBy, err = pgListReferencedBy(ctx, db, t.Schema, t.Name)
-		if err != nil {
-			return Schema{}, fmt.Errorf("list referenced_by for %s.%s: %w", t.Schema, t.Name, err)
-		}
+	if err := pgAttachReferencedBy(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach referenced_by: %w", err)
 	}
 
 	return Schema{Tables: tables}, nil
@@ -81,9 +83,11 @@ func pgListTables(ctx context.Context, db *sql.DB, schemas []string) ([]Table, e
 	return tables, nil
 }
 
-func pgListColumns(ctx context.Context, db *sql.DB, schema, name string) ([]Column, error) {
+func pgAttachColumns(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
 	const query = `
 		SELECT
+			n.nspname,
+			c.relname,
 			a.attname,
 			pg_catalog.format_type(a.atttypid, a.atttypmod),
 			NOT a.attnotnull,
@@ -95,80 +99,92 @@ func pgListColumns(ctx context.Context, db *sql.DB, schema, name string) ([]Colu
 		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-		WHERE n.nspname = $1 AND c.relname = $2 AND a.attnum > 0 AND NOT a.attisdropped
-		ORDER BY a.attnum
+		WHERE c.relkind IN ('r', 'p')
+		  AND n.nspname = ANY($1)
+		  AND a.attnum > 0
+		  AND NOT a.attisdropped
+		ORDER BY n.nspname, c.relname, a.attnum
 	`
 
-	rows, err := db.QueryContext(ctx, query, schema, name)
+	rows, err := db.QueryContext(ctx, query, schemas)
 	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
+		return fmt.Errorf("query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var cols []Column
-
 	for rows.Next() {
 		var (
-			c   Column
-			def sql.NullString
+			schemaName, tableName string
+			c                     Column
+			def                   sql.NullString
 		)
 
-		if err := rows.Scan(&c.Name, &c.Type, &c.Nullable, &def, &c.IsGenerated, &c.IsIdentity, &c.Comment); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+		if err := rows.Scan(&schemaName, &tableName, &c.Name, &c.Type, &c.Nullable, &def,
+			&c.IsGenerated, &c.IsIdentity, &c.Comment); err != nil {
+			return fmt.Errorf("scan: %w", err)
 		}
 
 		if def.Valid {
 			c.Default = &def.String
 		}
 
-		cols = append(cols, c)
+		if t, ok := index[tableKey{schemaName, tableName}]; ok {
+			t.Columns = append(t.Columns, c)
+		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows: %w", err)
+		return fmt.Errorf("rows: %w", err)
 	}
 
-	return cols, nil
+	return nil
 }
 
-func pgListPrimaryKey(ctx context.Context, db *sql.DB, schema, name string) ([]string, error) {
+func pgAttachPrimaryKeys(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
 	const query = `
-		SELECT a.attname
+		SELECT
+			n.nspname,
+			c.relname,
+			a.attname
 		FROM pg_catalog.pg_index i
 		JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
-		WHERE i.indisprimary AND n.nspname = $1 AND c.relname = $2
-		ORDER BY array_position(i.indkey, a.attnum)
+		WHERE i.indisprimary
+		  AND c.relkind IN ('r', 'p')
+		  AND n.nspname = ANY($1)
+		ORDER BY n.nspname, c.relname, array_position(i.indkey, a.attnum)
 	`
 
-	rows, err := db.QueryContext(ctx, query, schema, name)
+	rows, err := db.QueryContext(ctx, query, schemas)
 	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
+		return fmt.Errorf("query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var pk []string
-
 	for rows.Next() {
-		var col string
-		if err := rows.Scan(&col); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+		var schemaName, tableName, col string
+		if err := rows.Scan(&schemaName, &tableName, &col); err != nil {
+			return fmt.Errorf("scan: %w", err)
 		}
 
-		pk = append(pk, col)
+		if t, ok := index[tableKey{schemaName, tableName}]; ok {
+			t.PrimaryKey = append(t.PrimaryKey, col)
+		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows: %w", err)
+		return fmt.Errorf("rows: %w", err)
 	}
 
-	return pk, nil
+	return nil
 }
 
-func pgListForeignKeys(ctx context.Context, db *sql.DB, schema, name string) ([]ForeignKey, error) {
+func pgAttachForeignKeys(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
 	const query = `
 		SELECT
+			n.nspname,
+			c.relname,
 			con.conname,
 			rn.nspname,
 			rc.relname,
@@ -184,16 +200,19 @@ func pgListForeignKeys(ctx context.Context, db *sql.DB, schema, name string) ([]
 		JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
 		JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS rk(attnum, ord2) ON ord = ord2
 		JOIN pg_catalog.pg_attribute fa ON fa.attrelid = rc.oid AND fa.attnum = rk.attnum
-		WHERE con.contype = 'f' AND n.nspname = $1 AND c.relname = $2
-		ORDER BY con.conname, ord
+		WHERE con.contype = 'f'
+		  AND n.nspname = ANY($1)
+		ORDER BY n.nspname, c.relname, con.conname, ord
 	`
 
-	return pgScanFKs(ctx, db, query, schema, name)
+	return pgAttachFKs(ctx, db, query, schemas, index, fkDirectionForward)
 }
 
-func pgListReferencedBy(ctx context.Context, db *sql.DB, schema, name string) ([]ForeignKey, error) {
+func pgAttachReferencedBy(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
 	const query = `
 		SELECT
+			rn.nspname,
+			rc.relname,
 			con.conname,
 			n.nspname,
 			c.relname,
@@ -209,58 +228,89 @@ func pgListReferencedBy(ctx context.Context, db *sql.DB, schema, name string) ([
 		JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
 		JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS rk(attnum, ord2) ON ord = ord2
 		JOIN pg_catalog.pg_attribute fa ON fa.attrelid = rc.oid AND fa.attnum = rk.attnum
-		WHERE con.contype = 'f' AND rn.nspname = $1 AND rc.relname = $2
-		ORDER BY con.conname, ord
+		WHERE con.contype = 'f'
+		  AND rn.nspname = ANY($1)
+		ORDER BY rn.nspname, rc.relname, con.conname, ord
 	`
 
-	return pgScanFKs(ctx, db, query, schema, name)
+	return pgAttachFKs(ctx, db, query, schemas, index, fkDirectionReverse)
 }
 
-func pgScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) ([]ForeignKey, error) {
-	rows, err := db.QueryContext(ctx, query, schema, name)
+type fkDirection int
+
+const (
+	fkDirectionForward fkDirection = iota
+	fkDirectionReverse
+)
+
+func pgAttachFKs(ctx context.Context, db *sql.DB, query string, schemas []string,
+	index map[tableKey]*Table, direction fkDirection,
+) error {
+	rows, err := db.QueryContext(ctx, query, schemas)
 	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
+		return fmt.Errorf("query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var (
-		order  []string
-		byName = make(map[string]*ForeignKey)
-	)
+	type ownerKey struct {
+		schema, name, conname string
+	}
+
+	type fkAccum struct {
+		owner tableKey
+		fk    *ForeignKey
+	}
+
+	accum := make(map[ownerKey]*fkAccum)
+	order := make([]ownerKey, 0)
 
 	for rows.Next() {
 		var (
-			cname, linkedSchema, linkedName, col, refCol string
-			ord                                          int
+			ownerSchema, ownerName, cname, linkedSchema, linkedName, col, refCol string
+			ord                                                                  int
 		)
 
-		if err := rows.Scan(&cname, &linkedSchema, &linkedName, &col, &refCol, &ord); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+		if err := rows.Scan(&ownerSchema, &ownerName, &cname,
+			&linkedSchema, &linkedName, &col, &refCol, &ord); err != nil {
+			return fmt.Errorf("scan: %w", err)
 		}
 
-		key := linkedSchema + "\x00" + cname
-
-		fk, ok := byName[key]
-		if !ok {
-			fk = &ForeignKey{Table: pgQualify(linkedSchema, linkedName)}
-			byName[key] = fk
+		key := ownerKey{ownerSchema, ownerName, cname}
+		entry, exists := accum[key]
+		if !exists {
+			entry = &fkAccum{
+				owner: tableKey{ownerSchema, ownerName},
+				fk:    &ForeignKey{Table: pgQualify(linkedSchema, linkedName)},
+			}
+			accum[key] = entry
 			order = append(order, key)
 		}
 
-		fk.Columns = append(fk.Columns, col)
-		fk.References = append(fk.References, refCol)
+		entry.fk.Columns = append(entry.fk.Columns, col)
+		entry.fk.References = append(entry.fk.References, refCol)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows: %w", err)
+		return fmt.Errorf("rows: %w", err)
 	}
 
-	out := make([]ForeignKey, 0, len(order))
-	for _, n := range order {
-		out = append(out, *byName[n])
+	for _, key := range order {
+		entry := accum[key]
+
+		t, found := index[entry.owner]
+		if !found {
+			continue
+		}
+
+		switch direction {
+		case fkDirectionForward:
+			t.ForeignKeys = append(t.ForeignKeys, *entry.fk)
+		case fkDirectionReverse:
+			t.ReferencedBy = append(t.ReferencedBy, *entry.fk)
+		}
 	}
 
-	return out, nil
+	return nil
 }
 
 func pgQualify(schema, name string) string {
