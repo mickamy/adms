@@ -263,7 +263,7 @@ func mysqlAttachFKs(ctx context.Context, db *sql.DB, query string, args []any,
 	defer func() { _ = rows.Close() }()
 
 	type ownerKey struct {
-		schema, name, conname string
+		schema, name, conname, linkedSchema, linkedName string
 	}
 
 	type fkAccum struct {
@@ -285,7 +285,7 @@ func mysqlAttachFKs(ctx context.Context, db *sql.DB, query string, args []any,
 			return fmt.Errorf("scan: %w", err)
 		}
 
-		key := ownerKey{ownerSchema, ownerName, cname}
+		key := ownerKey{ownerSchema, ownerName, cname, linkedSchema, linkedName}
 		entry, exists := accum[key]
 		if !exists {
 			entry = &fkAccum{
