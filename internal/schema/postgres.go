@@ -238,11 +238,13 @@ func pgScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) ([]F
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 
-		fk, ok := byName[cname]
+		key := linkedSchema + "\x00" + cname
+
+		fk, ok := byName[key]
 		if !ok {
 			fk = &ForeignKey{Table: pgQualify(linkedSchema, linkedName)}
-			byName[cname] = fk
-			order = append(order, cname)
+			byName[key] = fk
+			order = append(order, key)
 		}
 
 		fk.Columns = append(fk.Columns, col)
