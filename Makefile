@@ -36,6 +36,11 @@ clean:
 test:
 	go test ./... -race
 
+test-integration:
+	@trap 'docker compose down' EXIT; \
+		docker compose up -d --wait && \
+		go test -tags=integration ./... -race
+
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "golangci-lint is not installed"; \

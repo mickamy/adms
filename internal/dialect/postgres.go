@@ -1,0 +1,32 @@
+package dialect
+
+import (
+	"fmt"
+	"strings"
+)
+
+type postgresDialect struct{}
+
+func Postgres() Dialect { return postgresDialect{} }
+
+func (postgresDialect) Name() string { return "postgres" }
+
+func (postgresDialect) Quote(ident string) string {
+	return `"` + strings.ReplaceAll(ident, `"`, `""`) + `"`
+}
+
+func (postgresDialect) Placeholder(i int) string {
+	return fmt.Sprintf("$%d", i)
+}
+
+func (postgresDialect) SupportsILIKE() bool { return true }
+
+func (postgresDialect) SupportsReturning() bool { return true }
+
+func (postgresDialect) JSONAgg(expr, orderBy string) string {
+	if orderBy == "" {
+		return fmt.Sprintf("json_agg(%s)", expr)
+	}
+
+	return fmt.Sprintf("json_agg(%s ORDER BY %s)", expr, orderBy)
+}

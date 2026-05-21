@@ -15,7 +15,7 @@ type command struct {
 
 var commands = []command{
 	{"serve", "Run the HTTP API server", notImplemented("serve")},
-	{"check", "Verify DB connectivity and schema introspection", notImplemented("check")},
+	{"check", "Verify DB connectivity and schema introspection", check},
 }
 
 func Run(args []string, stdout, stderr io.Writer) int {

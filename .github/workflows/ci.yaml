@@ -38,7 +38,14 @@ jobs:
           go-version-file: go.mod
 
       - name: Run tests
-        run: make test
+        run: go test -race -covermode=atomic -coverprofile=cover.out ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./cover.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   build:
     runs-on: ubuntu-latest
