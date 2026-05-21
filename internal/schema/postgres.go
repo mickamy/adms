@@ -240,7 +240,7 @@ func pgScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) ([]F
 
 		fk, ok := byName[cname]
 		if !ok {
-			fk = &ForeignKey{Table: qualify(linkedSchema, linkedName)}
+			fk = &ForeignKey{Table: pgQualify(linkedSchema, linkedName)}
 			byName[cname] = fk
 			order = append(order, cname)
 		}
@@ -261,7 +261,7 @@ func pgScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) ([]F
 	return out, nil
 }
 
-func qualify(schema, name string) string {
+func pgQualify(schema, name string) string {
 	if schema == "" || schema == "public" {
 		return name
 	}

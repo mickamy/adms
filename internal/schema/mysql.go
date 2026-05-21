@@ -241,7 +241,7 @@ func mysqlScanFKs(ctx context.Context, db *sql.DB, query, schema, name string) (
 
 		fk, ok := byName[key]
 		if !ok {
-			fk = &ForeignKey{Table: qualify(linkedSchema, linkedName)}
+			fk = &ForeignKey{Table: mysqlQualify(linkedSchema, linkedName)}
 			byName[key] = fk
 			order = append(order, key)
 		}
@@ -273,4 +273,12 @@ func mysqlInPlaceholders(values []string) (string, []any) {
 	}
 
 	return strings.Repeat("?,", len(values)-1) + "?", args
+}
+
+func mysqlQualify(schema, name string) string {
+	if schema == "" {
+		return name
+	}
+
+	return schema + "." + name
 }
