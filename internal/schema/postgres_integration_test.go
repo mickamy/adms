@@ -75,8 +75,8 @@ func TestPostgresIntrospect(t *testing.T) {
 		t.Errorf("users.email comment = %q, want %q", email.Comment, "optional email address")
 	}
 
-	assertFK(t, "posts → users", posts.ForeignKeys, "users", []string{"user_id"}, []string{"id"})
-	assertFK(t, "users ← posts", users.ReferencedBy, "posts", []string{"user_id"}, []string{"id"})
+	assertFK(t, "posts → users", posts.ForeignKeys, "public.users", []string{"user_id"}, []string{"id"})
+	assertFK(t, "users ← posts", users.ReferencedBy, "public.posts", []string{"user_id"}, []string{"id"})
 }
 
 func findTables(t *testing.T, s schema.Schema) (users, posts *schema.Table) {

@@ -5,14 +5,23 @@ import (
 	"fmt"
 )
 
+// qualify renders a (schema, name) pair into a single qualified
+// "schema.name" string, or just "name" when schema is empty. The
+// notation is uniform across drivers so that ForeignKey.Table values
+// have the same shape regardless of which dialect produced them.
+func qualify(schema, name string) string {
+	if schema == "" {
+		return name
+	}
+
+	return schema + "." + name
+}
+
 // attachFKs consumes FK rows in
 // (ownerSchema, ownerName, conname, linkedSchema, linkedName, col, refCol, ord) order,
-// groups them per constrained, and appends the resulting ForeignKeys to the table
-// identified by (ownerSchema, ownerName) in index. qualify renders a (schema, name)
-// pair into the dialect's preferred notation for ForeignKey.Table.
-func attachFKs(rows *sql.Rows, qualify func(schema, name string) string,
-	index map[tableKey]*Table, direction fkDirection,
-) error {
+// groups them per constraint, and appends the resulting ForeignKeys to the table
+// identified by (ownerSchema, ownerName) in index.
+func attachFKs(rows *sql.Rows, index map[tableKey]*Table, direction fkDirection) error {
 	type ownerKey struct {
 		schema, name, conname, linkedSchema, linkedName string
 	}

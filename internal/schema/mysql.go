@@ -88,7 +88,13 @@ func mysqlListTables(ctx context.Context, db *sql.DB, schemas []string) ([]Table
 	var tables []Table
 
 	for rows.Next() {
-		var t Table
+		t := Table{
+			PrimaryKey:   []string{},
+			Columns:      []Column{},
+			ForeignKeys:  []ForeignKey{},
+			ReferencedBy: []ForeignKey{},
+			Indexes:      []Index{},
+		}
 		if err := rows.Scan(&t.Schema, &t.Name); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
@@ -262,7 +268,7 @@ func mysqlAttachFKs(ctx context.Context, db *sql.DB, query string, args []any,
 	}
 	defer func() { _ = rows.Close() }()
 
-	return attachFKs(rows, mysqlQualify, index, direction)
+	return attachFKs(rows, index, direction)
 }
 
 func mysqlInPlaceholders(values []string) (string, []any) {
@@ -276,12 +282,4 @@ func mysqlInPlaceholders(values []string) (string, []any) {
 	}
 
 	return strings.Repeat("?,", len(values)-1) + "?", args
-}
-
-func mysqlQualify(schema, name string) string {
-	if schema == "" {
-		return name
-	}
-
-	return schema + "." + name
 }

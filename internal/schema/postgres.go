@@ -63,7 +63,13 @@ func pgListTables(ctx context.Context, db *sql.DB, schemas []string) ([]Table, e
 	var tables []Table
 
 	for rows.Next() {
-		var t Table
+		t := Table{
+			PrimaryKey:   []string{},
+			Columns:      []Column{},
+			ForeignKeys:  []ForeignKey{},
+			ReferencedBy: []ForeignKey{},
+			Indexes:      []Index{},
+		}
 		if err := rows.Scan(&t.Schema, &t.Name); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
@@ -240,13 +246,5 @@ func pgAttachFKs(ctx context.Context, db *sql.DB, query string, schemas []string
 	}
 	defer func() { _ = rows.Close() }()
 
-	return attachFKs(rows, pgQualify, index, direction)
-}
-
-func pgQualify(schema, name string) string {
-	if schema == "" || schema == "public" {
-		return name
-	}
-
-	return schema + "." + name
+	return attachFKs(rows, index, direction)
 }

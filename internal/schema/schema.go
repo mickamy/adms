@@ -7,11 +7,11 @@ type Schema struct {
 type Table struct {
 	Schema       string       `json:"schema"`
 	Name         string       `json:"name"`
-	PrimaryKey   []string     `json:"primary_key,omitempty"`
+	PrimaryKey   []string     `json:"primary_key"`
 	Columns      []Column     `json:"columns"`
-	ForeignKeys  []ForeignKey `json:"foreign_keys,omitempty"`
-	ReferencedBy []ForeignKey `json:"referenced_by,omitempty"`
-	Indexes      []Index      `json:"indexes,omitempty"`
+	ForeignKeys  []ForeignKey `json:"foreign_keys"`
+	ReferencedBy []ForeignKey `json:"referenced_by"`
+	Indexes      []Index      `json:"indexes"`
 }
 
 type Column struct {
