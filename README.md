@@ -6,6 +6,7 @@ PostgREST-style HTTP API for PostgreSQL and MySQL, plus an optional bundled admi
 
 [![CI](https://github.com/mickamy/adms/actions/workflows/ci.yml/badge.svg)](https://github.com/mickamy/adms/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mickamy/adms)](https://goreportcard.com/report/github.com/mickamy/adms)
+[![Codecov](https://codecov.io/gh/mickamy/adms/branch/main/graph/badge.svg)](https://codecov.io/gh/mickamy/adms)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/mickamy?label=sponsor&logo=github)](https://github.com/sponsors/mickamy)
 
