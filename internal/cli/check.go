@@ -95,10 +95,12 @@ func printSummary(w io.Writer, cfg config.Config, sch schema.Schema) {
 	fmt.Fprintf(w, "ok: connected, introspected %d tables in schema(s) %s\n",
 		len(sch.Tables), strings.Join(displayed, ", "))
 
+	if len(displayed) == 1 && displayed[0] == "(driver default)" {
+		return
+	}
+
 	for _, s := range displayed {
-		if c, ok := counts[s]; ok {
-			fmt.Fprintf(w, "  %s: %d tables\n", s, c)
-		}
+		fmt.Fprintf(w, "  %s: %d tables\n", s, counts[s])
 	}
 }
 
