@@ -21,6 +21,8 @@ func pgTestDSN() string {
 }
 
 func TestPostgresIntrospect(t *testing.T) {
+	t.Parallel()
+
 	conn, err := sql.Open("pgx", pgTestDSN())
 	if err != nil {
 		t.Fatalf("open: %v", err)

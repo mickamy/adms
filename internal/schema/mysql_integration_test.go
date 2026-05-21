@@ -21,6 +21,8 @@ func mysqlTestDSN() string {
 }
 
 func TestMySQLIntrospect(t *testing.T) {
+	t.Parallel()
+
 	conn, err := sql.Open("mysql", mysqlTestDSN())
 	if err != nil {
 		t.Fatalf("open: %v", err)
