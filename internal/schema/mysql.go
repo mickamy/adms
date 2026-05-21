@@ -3,6 +3,7 @@ package schema
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -54,12 +55,16 @@ func (mysqlIntrospector) Introspect(ctx context.Context, db *sql.DB, allowedSche
 }
 
 func mysqlCurrentSchema(ctx context.Context, db *sql.DB) (string, error) {
-	var name string
+	var name sql.NullString
 	if err := db.QueryRowContext(ctx, "SELECT DATABASE()").Scan(&name); err != nil {
 		return "", fmt.Errorf("scan current schema: %w", err)
 	}
 
-	return name, nil
+	if !name.Valid {
+		return "", errors.New("no default database selected; specify --allowed-schemas or include a database in the DSN")
+	}
+
+	return name.String, nil
 }
 
 func mysqlListTables(ctx context.Context, db *sql.DB, schemas []string) ([]Table, error) {
