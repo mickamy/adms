@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/mickamy/adms/internal/config"
@@ -35,7 +36,12 @@ func check(args []string, stdout, stderr io.Writer) int {
 		return exit.Error
 	}
 
-	intro := pickIntrospector(cfg.Driver)
+	intro, err := pickIntrospector(cfg.Driver)
+	if err != nil {
+		fmt.Fprintf(stderr, "adms check: %v\n", err)
+
+		return exit.Error
+	}
 
 	sch, err := intro.Introspect(ctx, db.DB, cfg.AllowedSchemas)
 	if err != nil {
@@ -44,24 +50,48 @@ func check(args []string, stdout, stderr io.Writer) int {
 		return exit.Error
 	}
 
-	displayed := cfg.AllowedSchemas
-	if len(displayed) == 0 {
-		displayed = []string{"(driver default)"}
-	}
-
-	fmt.Fprintf(stdout, "ok: connected, introspected %d tables in schema(s) %s\n",
-		len(sch.Tables), strings.Join(displayed, ", "))
+	printSummary(stdout, cfg, sch)
 
 	return exit.OK
 }
 
-func pickIntrospector(d database.Driver) schema.Introspector {
+func printSummary(w io.Writer, cfg config.Config, sch schema.Schema) {
+	counts := make(map[string]int)
+	for _, tbl := range sch.Tables {
+		counts[tbl.Schema]++
+	}
+
+	displayed := cfg.AllowedSchemas
+	if len(displayed) == 0 {
+		if len(counts) > 0 {
+			displayed = make([]string, 0, len(counts))
+			for s := range counts {
+				displayed = append(displayed, s)
+			}
+
+			sort.Strings(displayed)
+		} else {
+			displayed = []string{"(driver default)"}
+		}
+	}
+
+	fmt.Fprintf(w, "ok: connected, introspected %d tables in schema(s) %s\n",
+		len(sch.Tables), strings.Join(displayed, ", "))
+
+	for _, s := range displayed {
+		if c, ok := counts[s]; ok {
+			fmt.Fprintf(w, "  %s: %d tables\n", s, c)
+		}
+	}
+}
+
+func pickIntrospector(d database.Driver) (schema.Introspector, error) {
 	switch d {
 	case database.DriverPostgres:
-		return schema.PostgresIntrospector()
+		return schema.PostgresIntrospector(), nil
 	case database.DriverMySQL:
-		return schema.MySQLIntrospector()
+		return schema.MySQLIntrospector(), nil
 	default:
-		panic(fmt.Sprintf("unknown driver: %q", d))
+		return nil, fmt.Errorf("unknown driver: %q", d)
 	}
 }
