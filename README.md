@@ -4,7 +4,7 @@ _Pronounced "adams"._
 
 PostgREST-style HTTP API for PostgreSQL and MySQL, plus an optional bundled admin UI — all in one binary.
 
-[![CI](https://github.com/mickamy/adms/actions/workflows/ci.yml/badge.svg)](https://github.com/mickamy/adms/actions/workflows/ci.yml)
+[![CI](https://github.com/mickamy/adms/actions/workflows/ci.yaml/badge.svg)](https://github.com/mickamy/adms/actions/workflows/ci.yaml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mickamy/adms)](https://goreportcard.com/report/github.com/mickamy/adms)
 [![Codecov](https://codecov.io/gh/mickamy/adms/branch/main/graph/badge.svg)](https://codecov.io/gh/mickamy/adms)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
