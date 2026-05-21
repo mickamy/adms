@@ -87,14 +87,14 @@ func printSummary(w io.Writer, cfg config.Config, sch schema.Schema) {
 
 			sort.Strings(displayed)
 		} else {
-			displayed = []string{"(driver default)"}
+			displayed = []string{"(no tables found)"}
 		}
 	}
 
 	fmt.Fprintf(w, "ok: connected, introspected %d tables in schema(s) %s\n",
 		len(sch.Tables), strings.Join(displayed, ", "))
 
-	if len(displayed) == 1 && displayed[0] == "(driver default)" {
+	if len(displayed) == 1 && displayed[0] == "(no tables found)" {
 		return
 	}
 
