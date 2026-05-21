@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mickamy/adms/internal/database"
 )
@@ -16,6 +17,7 @@ type Config struct {
 	DSN            string
 	AllowedSchemas []string
 	AllowedTables  []string
+	Timeout        time.Duration
 }
 
 // Parse resolves CLI flags and ADMS_* environment variables into a Config.
@@ -30,6 +32,7 @@ func Parse(args []string, stderr io.Writer) (Config, error) {
 		"comma-separated schemas to introspect")
 	allowedTables := fs.String("allowed-tables", os.Getenv("ADMS_ALLOWED_TABLES"),
 		"comma-separated table allowlist")
+	timeout := fs.Duration("timeout", defaultTimeoutFromEnv(), "operation timeout (e.g., 30s, 2m)")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -58,7 +61,18 @@ func Parse(args []string, stderr io.Writer) (Config, error) {
 		DSN:            *dsn,
 		AllowedSchemas: splitCSV(*allowedSchemas),
 		AllowedTables:  splitCSV(*allowedTables),
+		Timeout:        *timeout,
 	}, nil
+}
+
+func defaultTimeoutFromEnv() time.Duration {
+	if v := os.Getenv("ADMS_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+
+	return 30 * time.Second
 }
 
 func parseDriver(s string) (database.Driver, error) {

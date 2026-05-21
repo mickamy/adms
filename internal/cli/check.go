@@ -11,15 +11,12 @@ import (
 	"sort"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
 	"github.com/mickamy/adms/internal/exit"
 	"github.com/mickamy/adms/internal/schema"
 )
-
-const checkTimeout = 30 * time.Second
 
 func check(args []string, stdout, stderr io.Writer) int {
 	cfg, err := config.Parse(args, stderr)
@@ -36,7 +33,7 @@ func check(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
+	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
 	db, err := database.Open(cfg.Driver, cfg.DSN)
