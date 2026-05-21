@@ -22,7 +22,7 @@ import (
 const checkTimeout = 30 * time.Second
 
 func check(args []string, stdout, stderr io.Writer) int {
-	cfg, err := config.Parse(args)
+	cfg, err := config.Parse(args, stderr)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return exit.OK

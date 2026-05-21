@@ -20,7 +20,7 @@ type Config struct {
 
 // Parse resolves CLI flags and ADMS_* environment variables into a Config.
 // Flag values win over environment values when both are set.
-func Parse(args []string) (Config, error) {
+func Parse(args []string, stderr io.Writer) (Config, error) {
 	fs := flag.NewFlagSet("adms", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -32,6 +32,11 @@ func Parse(args []string) (Config, error) {
 		"comma-separated table allowlist")
 
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fs.SetOutput(stderr)
+			fs.Usage()
+		}
+
 		return Config{}, fmt.Errorf("parse flags: %w", err)
 	}
 

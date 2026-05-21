@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -104,7 +105,7 @@ func TestParse(t *testing.T) {
 				t.Setenv(key, tt.env[key])
 			}
 
-			got, err := config.Parse(tt.args)
+			got, err := config.Parse(tt.args, &bytes.Buffer{})
 
 			if tt.wantErr != "" {
 				if err == nil {
