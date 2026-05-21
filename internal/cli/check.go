@@ -67,6 +67,8 @@ func check(args []string, stdout, stderr io.Writer) int {
 		return exit.Error
 	}
 
+	sch = filterAllowedTables(sch, cfg.AllowedTables)
+
 	printSummary(stdout, cfg, sch)
 
 	return exit.OK
@@ -102,6 +104,28 @@ func printSummary(w io.Writer, cfg config.Config, sch schema.Schema) {
 	for _, s := range displayed {
 		fmt.Fprintf(w, "  %s: %d tables\n", s, counts[s])
 	}
+}
+
+func filterAllowedTables(sch schema.Schema, allowed []string) schema.Schema {
+	if len(allowed) == 0 {
+		return sch
+	}
+
+	allow := make(map[string]struct{}, len(allowed))
+	for _, n := range allowed {
+		allow[n] = struct{}{}
+	}
+
+	filtered := make([]schema.Table, 0, len(sch.Tables))
+	for _, t := range sch.Tables {
+		if _, ok := allow[t.Name]; ok {
+			filtered = append(filtered, t)
+		}
+	}
+
+	sch.Tables = filtered
+
+	return sch
 }
 
 func pickIntrospector(d database.Driver) (schema.Introspector, error) {
