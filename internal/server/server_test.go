@@ -348,7 +348,10 @@ func waitForListener(t *testing.T, addr string, timeout time.Duration) {
 }
 
 func httpProbe(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	probeCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // probe helper, caller treats any error as "not ready"
 	}

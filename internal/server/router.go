@@ -9,7 +9,6 @@ func (s *Server) routes() http.Handler {
 
 	logger := s.logger()
 
-	// logging wraps recoverer so a panic still produces an access-log line
-	// (recoverer writes the 500 to the statusRecorder injected by logging).
+	// logging wraps recoverer so panics still produce an access-log line.
 	return logging(logger, recoverer(logger, mux))
 }
