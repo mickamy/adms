@@ -20,8 +20,14 @@ browser-based admin UI hosted from the same binary. No service layer, no codegen
 
 ### As an HTTP API
 
+```yaml
+# adms.yaml
+driver: postgres
+dsn: "${ADMS_DSN}"
+```
+
 ```sh
-adms serve --driver=postgres --dsn="postgres://postgres@localhost/myapp?sslmode=disable"
+ADMS_DSN="postgres://postgres@localhost/myapp?sslmode=disable" adms
 ```
 
 ```sh
@@ -50,8 +56,16 @@ curl 'http://localhost:7777/users?status=eq.active&order=created_at.desc&limit=1
 
 ### As a browser UI
 
+```yaml
+# adms.yaml
+driver: postgres
+dsn: "${ADMS_DSN}"
+ui:
+  enabled: true
+```
+
 ```sh
-adms serve --ui --driver=postgres --dsn="postgres://postgres@localhost/myapp?sslmode=disable"
+ADMS_DSN="postgres://postgres@localhost/myapp?sslmode=disable" adms
 # → open http://localhost:7778/
 ```
 
@@ -73,8 +87,8 @@ Two friction points in every admin tool you have ever built:
    project.
 
 `adms` collapses both into a single binary. It introspects your database on startup and exposes
-a [PostgREST](https://postgrest.org/)-style HTTP API automatically. Add `--ui` and the same binary serves a complete
-admin frontend — no extra deploy, no separate codebase.
+a [PostgREST](https://postgrest.org/)-style HTTP API automatically. Set `ui.enabled: true` in the config and the same
+binary serves a complete admin frontend — no extra deploy, no separate codebase.
 
 The closest neighbor is PostgREST itself: excellent, but PostgreSQL only and API only. `adms` aims for **PostgreSQL +
 MySQL** and **API + (optional) UI**, with no extra dependencies to install beyond the binary.
@@ -102,25 +116,38 @@ make build
 
 ## Quickstart
 
+`adms` reads a YAML or TOML config file. With no positional argument it auto-detects `adms.yaml`, `adms.yml`, then
+`adms.toml` in the current directory; otherwise pass the path explicitly (e.g., `adms /etc/adms.yaml`). Strings in the
+config are expanded from the environment via `${VAR}` / `$VAR`, so secrets stay out of the file.
+
 ### PostgreSQL
 
+```yaml
+# adms.yaml
+driver: postgres
+dsn: "${ADMS_DSN}"
+```
+
 ```sh
-adms serve \
-  --driver=postgres \
-  --dsn="postgres://postgres@localhost:5432/myapp?sslmode=disable"
+ADMS_DSN="postgres://postgres@localhost:5432/myapp?sslmode=disable" adms
 ```
 
 ### MySQL
 
-```sh
-adms serve \
-  --driver=mysql \
-  --dsn="user:pass@tcp(localhost:3306)/myapp?parseTime=true"
+```yaml
+# adms.yaml
+driver: mysql
+dsn: "${ADMS_DSN}"
 ```
 
-On boot, `adms` introspects the target database, builds an in-memory schema model, and starts listening on `:7777` (
-override with `--listen`). Every introspected table becomes a resource at `/<table_name>`. If `--ui` is set, a second
-listener on `:7778` (override with `--ui-listen`) also serves the bundled admin UI from the same process.
+```sh
+ADMS_DSN="user:pass@tcp(localhost:3306)/myapp?parseTime=true" adms
+```
+
+On boot, `adms` introspects the target database, builds an in-memory schema model, and starts listening on `:7777`
+(override with `listen:` in the config). Every introspected table becomes a resource at `/<table_name>`. With
+`ui.enabled: true`, a second listener on `:7778` (override with `ui.listen:`) also serves the bundled admin UI from
+the same process.
 
 Verify it works:
 
@@ -203,8 +230,8 @@ direction.
 curl 'http://localhost:7777/users?order=created_at.desc,id.asc&limit=20&offset=40'
 ```
 
-`limit` is capped (default 1000) and defaults to 100 when omitted. Configure both with `--default-limit` and
-`--max-limit`.
+`limit` is capped (default 1000) and defaults to 100 when omitted. Configure both with `default_limit:` and
+`max_limit:` in the config file.
 
 #### Counting rows
 
@@ -306,7 +333,7 @@ Errors follow a PostgREST-shaped JSON envelope with adms-specific codes (prefixe
 | 400  | `ADMS_INVALID_FILTER`   | Bad operator or value format           |
 | 400  | `ADMS_UNFILTERED_WRITE` | `PATCH` / `DELETE` without any filter  |
 | 400  | `ADMS_UNKNOWN_COLUMN`   | Column name not in schema              |
-| 403  | `ADMS_READ_ONLY`        | Write attempted while `--read-only`    |
+| 403  | `ADMS_READ_ONLY`        | Write attempted while `read_only: true` |
 | 404  | `ADMS_UNKNOWN_TABLE`    | Table name not in (allowed) schema     |
 | 409  | `ADMS_CONFLICT`         | DB-level unique / FK violation         |
 | 422  | `ADMS_INVALID_BODY`     | JSON body fails column-type validation |
@@ -373,10 +400,10 @@ curl http://localhost:7777/
 
 ## The admin UI
 
-Enabled with `--ui`. Off by default, so API-only deployments stay lean. When on, the UI is served on a **separate
-listener** (`--ui-listen`, default `:7778`) by the same process. The API at `:7777` stays untouched, with table names
-occupying the full URL root. The UI calls the same HTTP API documented above, with CORS auto-configured between the two
-listeners — it is not a parallel implementation, it is the first-class client of it.
+Enabled with `ui.enabled: true` in the config. Off by default, so API-only deployments stay lean. When on, the UI is
+served on a **separate listener** (`ui.listen`, default `:7778`) by the same process. The API at `:7777` stays
+untouched, with table names occupying the full URL root. The UI calls the same HTTP API documented above, with CORS
+auto-configured between the two listeners — it is not a parallel implementation, it is the first-class client of it.
 
 The UI is a single-binary affair: HTML, CSS, and JavaScript are embedded into the `adms` executable via `embed.FS`. No
 `node_modules`, no separate frontend deploy. It is rendered server-side with Go's `html/template`, made interactive
@@ -406,9 +433,9 @@ with [HTMX](https://htmx.org/), and styled with Tailwind CSS.
 ### Access
 
 The UI calls the same HTTP API you would. Cross-origin calls between the two listeners are handled automatically —
-`adms` adds the UI's origin to the API's allowed origins, so you do not need to list it in `--cors-origins`. When
-`--auth-token-env=...` is set, the UI carries the token on every request.
-When `--read-only` is set, the UI hides edit / insert / delete affordances. The UI does not introduce its own login
+`adms` adds the UI's origin to the API's allowed origins, so you do not need to list it in `cors_origins`. When
+`auth_token_env` names a populated env var, the UI carries that token on every request.
+When `read_only: true`, the UI hides edit / insert / delete affordances. The UI does not introduce its own login
 flow — keep it behind your network or gateway.
 
 ## Security
@@ -424,8 +451,8 @@ echoed back to the client unsanitized.
 
 ### Read-only mode
 
-```sh
-adms serve --read-only ...
+```yaml
+read_only: true
 ```
 
 Returns `403 Forbidden` for `POST`, `PATCH`, and `DELETE`. The admin UI hides write affordances in this mode. Useful for
@@ -435,30 +462,35 @@ staging dashboards, demos, or anywhere writes must be impossible by construction
 
 Restrict which schemas (or tables) are exposed:
 
-```sh
-adms serve --allowed-schemas=public,reporting ...
-adms serve --allowed-tables=users,posts,comments ...
+```yaml
+allowed_schemas: [public, reporting]
+allowed_tables: [users, posts, comments]
 ```
 
 Anything outside the allowlist is invisible — at `GET /`, at the per-table endpoints, and in the UI sidebar.
 
 ### Bearer token (planned, Phase 6)
 
-```sh
-adms serve --auth-token-env=ADMS_TOKEN ...
+```yaml
+auth_token_env: ADMS_TOKEN
 ```
 
-When set, requests must include `Authorization: Bearer <token>`. The admin UI carries the token automatically. This is
-intentionally simple — for OIDC / JWT, terminate auth at your gateway.
+When set, `adms` reads the bearer token from the named environment variable and requires every request to include
+`Authorization: Bearer <token>`. The admin UI carries the token automatically. This is intentionally simple — for OIDC
+/ JWT, terminate auth at your gateway. The token value itself never appears in the config file, so it does not leak
+into version control.
 
 ### CORS
 
-```sh
-adms serve --cors-origins="https://admin.example.com,https://staff.example.com" ...
+```yaml
+cors_origins:
+  - "https://admin.example.com"
+  - "https://staff.example.com"
 ```
 
-Defaults to no CORS headers, so the API is only reachable from same-origin contexts unless you opt in. When `--ui` is
-enabled, the bundled admin UI's origin is automatically added to the allowed origins — you do not need to list it here.
+Defaults to no CORS headers, so the API is only reachable from same-origin contexts unless you opt in. When
+`ui.enabled: true`, the bundled admin UI's origin is automatically added to the allowed origins — you do not need to
+list it here.
 
 ### Mandatory filters on writes
 
@@ -467,79 +499,78 @@ enabled, the bundled admin UI's origin is automatically added to the allowed ori
 ## CLI
 
 ```
-adms <command> [flags]
+adms [config-file]
 
-Commands:
-  serve   Run the HTTP API server (and optional admin UI)
-  check   Verify DB connectivity and schema introspection without starting the server
+If the argument is omitted, adms looks for adms.yaml, adms.yml, then adms.toml
+in the current directory. Pass a path to use a specific config file.
 
 Flags:
   --version, -v   Print version
   --help, -h      Show help
 ```
 
-### `adms serve`
+The config file is the single source of configuration — there are no per-setting CLI flags or `ADMS_*` reserved
+environment variables. Strings in the config file are expanded via `${VAR}` / `$VAR` from the environment so secrets
+(DSN, bearer token, etc.) stay out of source control. Unset variables expand to `""`, and literal `$` cannot be
+escaped, so put values containing `$` in an environment variable.
 
-| Flag                | Default        | Description                               |
-|---------------------|----------------|-------------------------------------------|
-| `--allowed-schemas` | driver default | Comma-separated schemas to introspect     |
-| `--allowed-tables`  | _(all)_        | Comma-separated table allowlist           |
-| `--auth-token-env`  | _(none)_       | Env var holding a bearer token to require |
-| `--cors-origins`    | _(none)_       | Comma-separated allowed origins for CORS  |
-| `--default-limit`   | `100`          | LIMIT applied when client omits it        |
-| `--driver`          | _(required)_   | `postgres` or `mysql`                     |
-| `--dsn`             | _(required)_   | Database connection string                |
-| `--listen`          | `:7777`        | Listen address                            |
-| `--log-level`       | `info`         | `debug` / `info` / `warn` / `error`       |
-| `--max-limit`       | `1000`         | Cap on client-supplied LIMIT              |
-| `--read-only`       | `false`        | Reject all write methods with `403`       |
-| `--ui`              | `false`        | Mount the bundled admin UI                |
-| `--ui-listen`       | `:7778`        | Listen address for the admin UI           |
+## Configuration (config file)
 
-### `adms check`
+A minimal config:
 
-Verifies DSN connectivity and schema introspection without starting the server. Exits non-zero with a diagnostic on
-stderr if anything fails — handy as a CI preflight step before deploying.
-
-```sh
-adms check --driver=postgres --dsn="postgres://..."
-# → "ok: connected, introspected 12 tables in schema(s) public"
-# → exit 0 on success, non-zero on failure
+```yaml
+driver: postgres
+dsn: "${ADMS_DSN}"
 ```
 
-## Configuration (environment variables)
+The full set of fields, with defaults and meaning:
 
-Every CLI flag has a matching environment variable. Flags win when both are set.
+| Field             | Default          | Description                                                |
+|-------------------|------------------|------------------------------------------------------------|
+| `driver`          | _(required)_     | `postgres` or `mysql`                                      |
+| `dsn`             | _(required)_     | Database connection string (prefer `${VAR}` expansion)     |
+| `listen`          | `:7777`          | API listen address                                         |
+| `read_only`       | `false`          | Reject all write methods with `403`                        |
+| `allowed_schemas` | _(driver default)_ | Schemas to introspect                                    |
+| `allowed_tables`  | _(all)_          | Table allowlist (empty means every introspected table)     |
+| `timeout`         | `30s`            | Startup operation timeout (DSN parsing, introspect, etc.)  |
+| `default_limit`   | `100`            | LIMIT applied when the client omits it                     |
+| `max_limit`       | `1000`           | Cap on client-supplied LIMIT                               |
+| `cors_origins`    | _(none)_         | Allowed origins for CORS                                   |
+| `auth_token_env`  | _(none)_         | Name of the env var holding a bearer token to require      |
+| `log_level`       | `info`           | `debug` / `info` / `warn` / `error`                        |
+| `ui.enabled`      | `false`          | Mount the bundled admin UI                                 |
+| `ui.listen`       | `:7778`          | Listen address for the admin UI                            |
 
-| Env                    | Flag                |
-|------------------------|---------------------|
-| `ADMS_ALLOWED_SCHEMAS` | `--allowed-schemas` |
-| `ADMS_ALLOWED_TABLES`  | `--allowed-tables`  |
-| `ADMS_CORS_ORIGINS`    | `--cors-origins`    |
-| `ADMS_DEFAULT_LIMIT`   | `--default-limit`   |
-| `ADMS_DRIVER`          | `--driver`          |
-| `ADMS_DSN`             | `--dsn`             |
-| `ADMS_LISTEN`          | `--listen`          |
-| `ADMS_LOG_LEVEL`       | `--log-level`       |
-| `ADMS_MAX_LIMIT`       | `--max-limit`       |
-| `ADMS_READ_ONLY`       | `--read-only`       |
-| `ADMS_UI`              | `--ui`              |
-| `ADMS_UI_LISTEN`       | `--ui-listen`       |
+TOML works the same way:
 
-For the bearer token, set `--auth-token-env=<ENV_NAME>` so `adms` reads the actual secret from the environment variable
-named `<ENV_NAME>`. The token value itself is never read from a CLI flag, to avoid leaking it into shell history.
+```toml
+driver = "postgres"
+dsn = "${ADMS_DSN}"
+listen = ":7777"
+read_only = false
+allowed_schemas = ["public"]
+
+[ui]
+enabled = false
+listen = ":7778"
+```
+
+Working examples live in [`examples/adms.yaml`](examples/adms.yaml) and [`examples/adms.toml`](examples/adms.toml).
 
 ## Roadmap
 
-- [x] Phase 0 — CLI scaffolding (`serve` / `check` subcommands), goreleaser metadata
-- [ ] Phase 1 — Schema introspection (PostgreSQL + MySQL); working `adms check`
+- [x] Phase 0 — CLI scaffolding, goreleaser metadata
+- [x] Phase 1 — Schema introspection (PostgreSQL + MySQL)
+- [x] Phase 1.5 — Config-file driven CLI; subcommands and per-setting flags removed
 - [ ] Phase 2 — HTTP server, `GET /` schema endpoint, `GET /healthz`, graceful shutdown
 - [ ] Phase 3 — Read API: filter, projection, ordering, paging
 - [ ] Phase 4 — Read API: relation embedding (FK-aware JSON aggregation)
 - [ ] Phase 5 — Write API: `POST` / `PATCH` / `DELETE`, `Prefer` header, `Content-Range`
-- [ ] Phase 6 — CORS, logging, panic recovery, `--read-only`, allowlists, bearer token, README polish
-- [ ] Phase 7 — Bundled admin UI (opt-in via `--ui`): served on a separate listener (`--ui-listen`, default `:7778`),
-  HTML/CSS/JS embedded, SSR with HTMX + Tailwind, CORS auto-configured, dark mode, keyboard shortcuts, accessibility
+- [ ] Phase 6 — CORS, logging, panic recovery, `read_only`, allowlists, bearer token, README polish
+- [ ] Phase 7 — Bundled admin UI (opt-in via `ui.enabled`): served on a separate listener (`ui.listen`, default
+  `:7778`), HTML/CSS/JS embedded, SSR with HTMX + Tailwind, CORS auto-configured, dark mode, keyboard shortcuts,
+  accessibility
 
 ## Why not PostgREST?
 
