@@ -165,6 +165,21 @@ func TestRecovererTurnsPanicInto500(t *testing.T) {
 	}
 }
 
+func TestServerRunReturnsListenFailure(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+
+	srv := &server.Server{
+		Addr:   "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
+		Logger: &logs,
+	}
+
+	if err := srv.Run(t.Context()); err == nil {
+		t.Fatal("Run() error = nil, want non-nil for invalid addr")
+	}
+}
+
 func TestServerRunGracefulShutdown(t *testing.T) {
 	t.Parallel()
 
