@@ -149,7 +149,10 @@ On boot, `adms` introspects the target database, builds an in-memory schema mode
 `ui.enabled: true`, a second listener on `:7778` (override with `ui.listen:`) also serves the bundled admin UI from
 the same process.
 
-Verify it works:
+> **Today (Phase 1.5):** `adms` connects, introspects, and prints a per-schema summary, then exits. The HTTP server,
+> health endpoint, and table resources described below land in Phase 2.
+
+Verify it works (Phase 2+):
 
 ```sh
 curl http://localhost:7777/                  # schema dump (JSON)
