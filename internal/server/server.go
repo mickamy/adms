@@ -32,6 +32,10 @@ func (s *Server) Run(ctx context.Context) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 
+	return s.serve(ctx, ln)
+}
+
+func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 	fmt.Fprintf(s.Logger, "adms: listening on %s\n", ln.Addr())
 
 	srv := &http.Server{

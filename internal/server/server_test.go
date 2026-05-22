@@ -246,21 +246,17 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 	}
 
 	addr := ln.Addr().String()
-	_ = ln.Close()
 
 	var logs bytes.Buffer
 
-	srv := &server.Server{
-		Addr:   addr,
-		Logger: &logs,
-	}
+	srv := &server.Server{Logger: &logs}
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	done := make(chan error, 1)
 
-	go func() { done <- srv.Run(ctx) }()
+	go func() { done <- srv.Serve(ctx, ln) }()
 
 	waitForListener(t, addr, 2*time.Second)
 
