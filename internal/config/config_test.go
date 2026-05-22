@@ -341,7 +341,7 @@ typo_field = "oops"`,
 	}
 }
 
-func TestLoad_ParseErrorIncludesPath(t *testing.T) {
+func TestLoad_ErrorIncludesPath(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -360,6 +360,17 @@ dsn: [not, a, string]`,
 			filename: "adms.toml",
 			body: `driver = "postgres"
 [unterminated`,
+		},
+		{
+			name:     "build-time validation error",
+			filename: "adms.yaml",
+			body:     `dsn: x`,
+		},
+		{
+			name:     "build-time unknown driver",
+			filename: "adms.yaml",
+			body: `driver: sqlite
+dsn: x`,
 		},
 	}
 

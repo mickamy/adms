@@ -41,7 +41,12 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 
-	return buildConfig(c)
+	cfg, err := buildConfig(c)
+	if err != nil {
+		return Config{}, fmt.Errorf("%s: %w", path, err)
+	}
+
+	return cfg, nil
 }
 
 func buildConfig(c config) (Config, error) {
