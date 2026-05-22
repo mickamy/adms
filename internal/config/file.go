@@ -39,13 +39,11 @@ func loadFile(path string) (config, error) {
 		return config{}, fmt.Errorf("read config: %w", err)
 	}
 
-	expanded := os.ExpandEnv(string(data))
-
 	var c config
 
 	switch ext := strings.ToLower(filepath.Ext(path)); ext {
 	case ".yaml", ".yml":
-		dec := yaml.NewDecoder(bytes.NewReader([]byte(expanded)))
+		dec := yaml.NewDecoder(bytes.NewReader(data))
 		dec.KnownFields(true)
 
 		if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
@@ -60,7 +58,7 @@ func loadFile(path string) (config, error) {
 			return config{}, fmt.Errorf("%s: parse yaml: %w", path, err)
 		}
 	case ".toml":
-		meta, err := toml.Decode(expanded, &c)
+		meta, err := toml.Decode(string(data), &c)
 		if err != nil {
 			return config{}, fmt.Errorf("%s: parse toml: %w", path, err)
 		}
@@ -77,5 +75,32 @@ func loadFile(path string) (config, error) {
 		return config{}, fmt.Errorf("%s: unsupported config extension %q (want .yaml, .yml, or .toml)", path, ext)
 	}
 
+	expandEnv(&c)
+
 	return c, nil
+}
+
+// expandEnv applies os.ExpandEnv to every string-valued field after decoding,
+// so env values may contain characters (quotes, backslashes, etc.) that would
+// be invalid in raw YAML/TOML.
+func expandEnv(c *config) {
+	c.Driver = os.ExpandEnv(c.Driver)
+	c.DSN = os.ExpandEnv(c.DSN)
+	c.Listen = os.ExpandEnv(c.Listen)
+	c.Timeout = os.ExpandEnv(c.Timeout)
+	c.AuthTokenEnv = os.ExpandEnv(c.AuthTokenEnv)
+	c.LogLevel = os.ExpandEnv(c.LogLevel)
+	c.UI.Listen = os.ExpandEnv(c.UI.Listen)
+
+	for i, s := range c.AllowedSchemas {
+		c.AllowedSchemas[i] = os.ExpandEnv(s)
+	}
+
+	for i, s := range c.AllowedTables {
+		c.AllowedTables[i] = os.ExpandEnv(s)
+	}
+
+	for i, s := range c.CORSOrigins {
+		c.CORSOrigins[i] = os.ExpandEnv(s)
+	}
 }

@@ -84,6 +84,38 @@ dsn: "${TEST_DSN}"`,
 			},
 		},
 		{
+			name:     "env value containing quotes does not break decode",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: "${TEST_DSN}"`,
+			env: map[string]string{"TEST_DSN": `host:"port" path\with\backslash`},
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      `host:"port" path\with\backslash`,
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
+			name:     "env expansion applies to string slice entries",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+allowed_schemas: ["${TEST_SCHEMA}", "static"]`,
+			env: map[string]string{"TEST_SCHEMA": "from_env"},
+			want: config.Config{
+				Driver:         database.DriverPostgres,
+				DSN:            "x",
+				Listen:         config.DefaultListen,
+				AllowedSchemas: []string{"from_env", "static"},
+				Timeout:        config.DefaultTimeout,
+				LogLevel:       config.DefaultLogLevel,
+				UI:             config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
 			name:     "yaml env unset expands to empty -> missing dsn",
 			filename: "adms.yaml",
 			body: `driver: postgres
