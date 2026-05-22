@@ -513,8 +513,9 @@ Flags:
 
 The config file is the single source of configuration — there are no per-setting CLI flags or `ADMS_*` reserved
 environment variables. Strings in the config file are expanded via `${VAR}` / `$VAR` from the environment so secrets
-(DSN, bearer token, etc.) stay out of source control. Unset variables expand to `""`, and literal `$` cannot be
-escaped, so put values containing `$` in an environment variable.
+(DSN, bearer token, etc.) stay out of source control; the env var names you reference (`ADMS_DSN`, `DATABASE_URL`,
+anything you like) are entirely your choice. Unset variables expand to `""`, and literal `$` cannot be escaped, so
+put values containing `$` in an environment variable.
 
 ## Configuration (config file)
 
