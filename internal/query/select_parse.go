@@ -23,8 +23,12 @@ func parseSelect(s string) ([]SelectItem, error) {
 			return nil, fmt.Errorf("empty select item in %q", s)
 		}
 
-		if strings.ContainsAny(col, "(:)") {
+		if strings.ContainsAny(col, "()") {
 			return nil, fmt.Errorf("embedded select %q is not supported yet", col)
+		}
+
+		if strings.Contains(col, ":") {
+			return nil, fmt.Errorf("aliased select %q is not supported yet", col)
 		}
 
 		items = append(items, SelectItem{Column: col})
