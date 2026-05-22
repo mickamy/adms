@@ -13,13 +13,14 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) schemaDump(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-
-	if err := enc.Encode(s.Schema); err != nil {
-		// Response headers are already sent; just log and let the connection drop.
+	body, err := json.MarshalIndent(s.Schema, "", "  ")
+	if err != nil {
 		fmt.Fprintf(s.logger(), "adms: encode schema: %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+
+		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(body)
 }
