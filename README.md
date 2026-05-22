@@ -233,8 +233,7 @@ direction.
 curl 'http://localhost:7777/users?order=created_at.desc,id.asc&limit=20&offset=40'
 ```
 
-`limit` is capped (default 1000) and defaults to 100 when omitted. Configure both with `default_limit:` and
-`max_limit:` in the config file.
+`limit` defaults to 100 when omitted and is capped at 1000.
 
 #### Counting rows
 
@@ -537,8 +536,6 @@ The full set of fields, with defaults and meaning:
 | `allowed_schemas` | _(driver default)_ | Schemas to introspect                                    |
 | `allowed_tables`  | _(all)_          | Table allowlist (empty means every introspected table)     |
 | `timeout`         | `30s`            | Startup operation timeout (DSN parsing, introspect, etc.)  |
-| `default_limit`   | `100`            | LIMIT applied when the client omits it                     |
-| `max_limit`       | `1000`           | Cap on client-supplied LIMIT                               |
 | `cors_origins`    | _(none)_         | Allowed origins for CORS                                   |
 | `auth_token_env`  | _(none)_         | Name of the env var holding a bearer token to require      |
 | `log_level`       | `info`           | `debug` / `info` / `warn` / `error`                        |
