@@ -59,10 +59,7 @@ func (r *statusRecorder) Unwrap() http.ResponseWriter {
 func (r *statusRecorder) Write(b []byte) (int, error) {
 	r.wroteHeader = true
 
-	n, err := r.ResponseWriter.Write(b)
-	if err != nil {
-		return n, fmt.Errorf("write: %w", err)
-	}
-
-	return n, nil
+	// Pass the error through unchanged so handlers and middleware can match it
+	// against sentinel values (e.g., http.ErrAbortHandler) via errors.Is/As.
+	return r.ResponseWriter.Write(b) //nolint:wrapcheck
 }
