@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,10 +17,10 @@ import (
 	"github.com/mickamy/adms/internal/server"
 )
 
-func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *bytes.Buffer) {
+func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuffer) {
 	t.Helper()
 
-	var logs bytes.Buffer
+	var logs syncBuffer
 
 	srv := &server.Server{
 		Schema: sch,
@@ -30,6 +31,27 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *bytes.Bu
 	t.Cleanup(ts.Close)
 
 	return ts, &logs
+}
+
+// syncBuffer wraps a bytes.Buffer with a mutex so concurrent writes from the
+// server goroutine and reads from the test goroutine are race-safe under -race.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Write(p) //nolint:wrapcheck // bytes.Buffer.Write never returns a non-nil error.
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.String()
 }
 
 func httpGet(t *testing.T, url string) *http.Response {
@@ -144,7 +166,7 @@ func TestLoggingMiddlewareEmitsLine(t *testing.T) {
 func TestRecovererTurnsPanicInto500(t *testing.T) {
 	t.Parallel()
 
-	var logs bytes.Buffer
+	var logs syncBuffer
 
 	panicking := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		panic("boom")
@@ -168,7 +190,7 @@ func TestRecovererTurnsPanicInto500(t *testing.T) {
 func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
 	t.Parallel()
 
-	var logs bytes.Buffer
+	var logs syncBuffer
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -209,7 +231,7 @@ func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
 func TestStatusRecorderUnwrapAllowsFlush(t *testing.T) {
 	t.Parallel()
 
-	var logs bytes.Buffer
+	var logs syncBuffer
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if err := http.NewResponseController(w).Flush(); err != nil {
@@ -243,7 +265,7 @@ func TestStatusRecorderUnwrapAllowsFlush(t *testing.T) {
 func TestPanicProducesLoggedFiveHundred(t *testing.T) {
 	t.Parallel()
 
-	var logs bytes.Buffer
+	var logs syncBuffer
 
 	panicking := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		panic("boom")
@@ -273,7 +295,7 @@ func TestPanicProducesLoggedFiveHundred(t *testing.T) {
 func TestServerRunReturnsListenFailure(t *testing.T) {
 	t.Parallel()
 
-	var logs bytes.Buffer
+	var logs syncBuffer
 
 	srv := &server.Server{
 		Addr:   "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
@@ -297,7 +319,7 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 
 	addr := ln.Addr().String()
 
-	var logs bytes.Buffer
+	var logs syncBuffer
 
 	srv := &server.Server{Logger: &logs}
 
