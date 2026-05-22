@@ -1,0 +1,18 @@
+driver = "postgres"
+# Secrets are read from environment variables via ${VAR} expansion.
+# Set ADMS_DSN (or any name you choose) in the environment before launching adms.
+dsn = "${ADMS_DSN}"
+listen = ":7777"
+timeout = "30s"
+read_only = false
+
+allowed_schemas = ["public"]
+allowed_tables = []
+
+cors_origins = []
+auth_token_env = ""
+log_level = "info"
+
+[ui]
+enabled = false
+listen = ":7778"

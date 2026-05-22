@@ -1,144 +1,403 @@
 package config_test
 
 import (
-	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
 )
 
-func TestParse(t *testing.T) {
+func TestLoad(t *testing.T) {
 	// Cannot use t.Parallel() here: subtests call t.Setenv, which is
 	// incompatible with parallel execution (it mutates process-wide env).
 
 	tests := []struct {
-		name    string
-		args    []string
-		env     map[string]string
-		want    config.Config
-		wantErr string
+		name     string
+		filename string
+		body     string
+		env      map[string]string
+		want     config.Config
+		wantErr  string
 	}{
 		{
-			name:    "missing driver",
-			args:    []string{},
-			wantErr: "--driver is required",
-		},
-		{
-			name:    "missing dsn",
-			args:    []string{"--driver=postgres"},
-			wantErr: "--dsn is required",
-		},
-		{
-			name:    "unknown driver",
-			args:    []string{"--driver=sqlite", "--dsn=foo"},
-			wantErr: `unknown driver "sqlite"`,
-		},
-		{
-			name: "flags only",
-			args: []string{
-				"--driver=postgres",
-				"--dsn=postgres://x",
-				"--allowed-schemas=public,internal",
-				"--allowed-tables=users,posts",
-			},
+			name:     "yaml minimal",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: "postgres://x"`,
 			want: config.Config{
-				Driver:         database.DriverPostgres,
-				DSN:            "postgres://x",
-				AllowedSchemas: []string{"public", "internal"},
-				AllowedTables:  []string{"users", "posts"},
+				Driver:   database.DriverPostgres,
+				DSN:      "postgres://x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
 			},
 		},
 		{
-			name: "env only",
-			env: map[string]string{
-				"ADMS_DRIVER":          "mysql",
-				"ADMS_DSN":             "root@tcp(localhost)/x",
-				"ADMS_ALLOWED_SCHEMAS": "main",
-			},
+			name:     "yaml full",
+			filename: "adms.yaml",
+			body: `driver: mysql
+dsn: "root@tcp(localhost)/x"
+listen: ":8080"
+read_only: true
+allowed_schemas: [public, internal]
+allowed_tables: [users, posts]
+timeout: 1m
+cors_origins: ["http://localhost:3000"]
+auth_token_env: ADMS_TOKEN
+log_level: debug
+ui:
+  enabled: true
+  listen: ":9000"`,
 			want: config.Config{
 				Driver:         database.DriverMySQL,
 				DSN:            "root@tcp(localhost)/x",
-				AllowedSchemas: []string{"main"},
+				Listen:         ":8080",
+				ReadOnly:       true,
+				AllowedSchemas: []string{"public", "internal"},
+				AllowedTables:  []string{"users", "posts"},
+				Timeout:        time.Minute,
+				CORSOrigins:    []string{"http://localhost:3000"},
+				AuthTokenEnv:   "ADMS_TOKEN",
+				LogLevel:       "debug",
+				UI:             config.UIConfig{Enabled: true, Listen: ":9000"},
 			},
 		},
 		{
-			name: "flag overrides env",
-			args: []string{"--driver=mysql"},
-			env: map[string]string{
-				"ADMS_DRIVER": "postgres",
-				"ADMS_DSN":    "any-dsn",
-			},
+			name:     "yaml env expansion",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: "${TEST_DSN}"`,
+			env: map[string]string{"TEST_DSN": "postgres://expanded"},
 			want: config.Config{
-				Driver: database.DriverMySQL,
-				DSN:    "any-dsn",
+				Driver:   database.DriverPostgres,
+				DSN:      "postgres://expanded",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
 			},
 		},
 		{
-			name: "driver alias pg",
-			args: []string{"--driver=PG", "--dsn=x"},
+			name:     "yaml env unset expands to empty -> missing dsn",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: "${TEST_DSN}"`,
+			wantErr: "dsn is required",
+		},
+		{
+			name:     "toml minimal",
+			filename: "adms.toml",
+			body: `driver = "postgres"
+dsn = "postgres://x"`,
 			want: config.Config{
-				Driver: database.DriverPostgres,
-				DSN:    "x",
+				Driver:   database.DriverPostgres,
+				DSN:      "postgres://x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
 			},
 		},
 		{
-			name: "trim whitespace in csv",
-			args: []string{"--driver=postgres", "--dsn=x", "--allowed-schemas=a, b ,c"},
+			name:     "toml full with ui section",
+			filename: "adms.toml",
+			body: `driver = "mysql"
+dsn = "root@tcp(localhost)/x"
+listen = ":8080"
+read_only = true
+timeout = "1m"
+
+[ui]
+enabled = true
+listen = ":9000"`,
 			want: config.Config{
-				Driver:         database.DriverPostgres,
-				DSN:            "x",
-				AllowedSchemas: []string{"a", "b", "c"},
+				Driver:   database.DriverMySQL,
+				DSN:      "root@tcp(localhost)/x",
+				Listen:   ":8080",
+				ReadOnly: true,
+				Timeout:  time.Minute,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Enabled: true, Listen: ":9000"},
 			},
+		},
+		{
+			name:     "yml extension is treated as yaml",
+			filename: "adms.yml",
+			body: `driver: postgres
+dsn: x`,
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      "x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
+			name:     "driver alias pg",
+			filename: "adms.yaml",
+			body: `driver: PG
+dsn: x`,
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      "x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
+			name:     "missing driver",
+			filename: "adms.yaml",
+			body:     `dsn: x`,
+			wantErr:  "driver is required",
+		},
+		{
+			name:     "unknown driver",
+			filename: "adms.yaml",
+			body: `driver: sqlite
+dsn: x`,
+			wantErr: `unknown driver "sqlite"`,
+		},
+		{
+			name:     "invalid timeout",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+timeout: notaduration`,
+			wantErr: `invalid timeout "notaduration"`,
+		},
+		{
+			name:     "yaml unknown field is rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+typo_field: oops`,
+			wantErr: "parse yaml",
+		},
+		{
+			name:     "toml unknown field is rejected",
+			filename: "adms.toml",
+			body: `driver = "postgres"
+dsn = "x"
+typo_field = "oops"`,
+			wantErr: "unknown toml key",
+		},
+		{
+			name:     "unsupported extension",
+			filename: "adms.json",
+			body:     `{}`,
+			wantErr:  "unsupported config extension",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			for _, key := range []string{
-				"ADMS_DRIVER",
-				"ADMS_DSN",
-				"ADMS_ALLOWED_SCHEMAS",
-				"ADMS_ALLOWED_TABLES",
-			} {
-				t.Setenv(key, tt.env[key])
+			for k, v := range tt.env {
+				t.Setenv(k, v)
 			}
 
-			got, err := config.Parse(tt.args, &bytes.Buffer{})
+			path := filepath.Join(t.TempDir(), tt.filename)
+			if err := os.WriteFile(path, []byte(tt.body), 0o600); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
+
+			got, err := config.Load(path)
 
 			if tt.wantErr != "" {
 				if err == nil {
-					t.Fatalf("Parse() error = nil, want substring %q", tt.wantErr)
+					t.Fatalf("Load() error = nil, want substring %q", tt.wantErr)
 				}
 
 				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Errorf("Parse() error = %q, want substring %q", err, tt.wantErr)
+					t.Errorf("Load() error = %q, want substring %q", err, tt.wantErr)
 				}
 
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("Parse() error = %v, want nil", err)
+				t.Fatalf("Load() error = %v, want nil", err)
 			}
 
-			if got.Driver != tt.want.Driver {
-				t.Errorf("Driver = %q, want %q", got.Driver, tt.want.Driver)
-			}
-
-			if got.DSN != tt.want.DSN {
-				t.Errorf("DSN = %q, want %q", got.DSN, tt.want.DSN)
-			}
-
-			if !equalStrings(got.AllowedSchemas, tt.want.AllowedSchemas) {
-				t.Errorf("AllowedSchemas = %v, want %v", got.AllowedSchemas, tt.want.AllowedSchemas)
-			}
-
-			if !equalStrings(got.AllowedTables, tt.want.AllowedTables) {
-				t.Errorf("AllowedTables = %v, want %v", got.AllowedTables, tt.want.AllowedTables)
-			}
+			assertConfigEqual(t, got, tt.want)
 		})
+	}
+}
+
+func TestLoad_MissingFile(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	if err == nil {
+		t.Fatal("Load() error = nil, want non-nil for missing file")
+	}
+
+	if !strings.Contains(err.Error(), "read config") {
+		t.Errorf("Load() error = %q, want substring %q", err, "read config")
+	}
+}
+
+func TestLoad_Examples(t *testing.T) {
+	// Cannot use t.Parallel() here: t.Setenv mutates process-wide env.
+
+	t.Setenv("ADMS_DSN", "postgres://example")
+
+	for _, path := range []string{
+		"../../examples/adms.yaml",
+		"../../examples/adms.toml",
+	} {
+		assertExampleLoads(t, path)
+	}
+}
+
+func assertExampleLoads(t *testing.T, path string) {
+	t.Helper()
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load(%s) error = %v", path, err)
+	}
+
+	if cfg.Driver != database.DriverPostgres {
+		t.Errorf("[%s] Driver = %q, want %q", path, cfg.Driver, database.DriverPostgres)
+	}
+
+	if cfg.DSN != "postgres://example" {
+		t.Errorf("[%s] DSN = %q, want %q (env expansion failed)", path, cfg.DSN, "postgres://example")
+	}
+
+	if cfg.Listen != ":7777" {
+		t.Errorf("[%s] Listen = %q, want %q", path, cfg.Listen, ":7777")
+	}
+
+	if cfg.Timeout != 30*time.Second {
+		t.Errorf("[%s] Timeout = %v, want %v", path, cfg.Timeout, 30*time.Second)
+	}
+
+	if cfg.UI.Listen != ":7778" {
+		t.Errorf("[%s] UI.Listen = %q, want %q", path, cfg.UI.Listen, ":7778")
+	}
+}
+
+func TestDetect(t *testing.T) {
+	t.Parallel()
+
+	t.Run("picks yaml over yml over toml", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		for _, name := range []string{"adms.yaml", "adms.yml", "adms.toml"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(""), 0o600); err != nil {
+				t.Fatalf("write %s: %v", name, err)
+			}
+		}
+
+		got, err := config.Detect(dir)
+		if err != nil {
+			t.Fatalf("Detect() error = %v", err)
+		}
+
+		if want := filepath.Join(dir, "adms.yaml"); got != want {
+			t.Errorf("Detect() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("falls through to toml when only toml exists", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "adms.toml"), []byte(""), 0o600); err != nil {
+			t.Fatalf("write fixture: %v", err)
+		}
+
+		got, err := config.Detect(dir)
+		if err != nil {
+			t.Fatalf("Detect() error = %v", err)
+		}
+
+		if want := filepath.Join(dir, "adms.toml"); got != want {
+			t.Errorf("Detect() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("returns ErrNoConfigFound on empty dir", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := config.Detect(t.TempDir())
+		if !errors.Is(err, config.ErrNoConfigFound) {
+			t.Errorf("Detect() error = %v, want ErrNoConfigFound", err)
+		}
+	})
+
+	t.Run("ignores directories named like config files", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		if err := os.Mkdir(filepath.Join(dir, "adms.yaml"), 0o700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+
+		_, err := config.Detect(dir)
+		if !errors.Is(err, config.ErrNoConfigFound) {
+			t.Errorf("Detect() error = %v, want ErrNoConfigFound (directory should be ignored)", err)
+		}
+	})
+}
+
+func assertConfigEqual(t *testing.T, got, want config.Config) {
+	t.Helper()
+
+	if got.Driver != want.Driver {
+		t.Errorf("Driver = %q, want %q", got.Driver, want.Driver)
+	}
+
+	if got.DSN != want.DSN {
+		t.Errorf("DSN = %q, want %q", got.DSN, want.DSN)
+	}
+
+	if got.Listen != want.Listen {
+		t.Errorf("Listen = %q, want %q", got.Listen, want.Listen)
+	}
+
+	if got.ReadOnly != want.ReadOnly {
+		t.Errorf("ReadOnly = %v, want %v", got.ReadOnly, want.ReadOnly)
+	}
+
+	if !equalStrings(got.AllowedSchemas, want.AllowedSchemas) {
+		t.Errorf("AllowedSchemas = %v, want %v", got.AllowedSchemas, want.AllowedSchemas)
+	}
+
+	if !equalStrings(got.AllowedTables, want.AllowedTables) {
+		t.Errorf("AllowedTables = %v, want %v", got.AllowedTables, want.AllowedTables)
+	}
+
+	if got.Timeout != want.Timeout {
+		t.Errorf("Timeout = %v, want %v", got.Timeout, want.Timeout)
+	}
+
+	if !equalStrings(got.CORSOrigins, want.CORSOrigins) {
+		t.Errorf("CORSOrigins = %v, want %v", got.CORSOrigins, want.CORSOrigins)
+	}
+
+	if got.AuthTokenEnv != want.AuthTokenEnv {
+		t.Errorf("AuthTokenEnv = %q, want %q", got.AuthTokenEnv, want.AuthTokenEnv)
+	}
+
+	if got.LogLevel != want.LogLevel {
+		t.Errorf("LogLevel = %q, want %q", got.LogLevel, want.LogLevel)
+	}
+
+	if got.UI != want.UI {
+		t.Errorf("UI = %+v, want %+v", got.UI, want.UI)
 	}
 }
 
