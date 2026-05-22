@@ -190,6 +190,56 @@ func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
 	}
 }
 
+func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	srv := &server.Server{} // Logger left nil
+
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+
+	resp := httpGet(t, ts.URL+"/healthz")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestStatusRecorderUnwrapAllowsFlush(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		_, _ = io.WriteString(w, "flushed")
+	})
+
+	ts := httptest.NewServer(server.Logging(&logs, handler))
+	t.Cleanup(ts.Close)
+
+	resp := httpGet(t, ts.URL+"/")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200 (Flush should succeed via Unwrap)", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	if string(body) != "flushed" {
+		t.Errorf("body = %q, want %q", string(body), "flushed")
+	}
+}
+
 func TestPanicProducesLoggedFiveHundred(t *testing.T) {
 	t.Parallel()
 

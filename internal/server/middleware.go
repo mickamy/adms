@@ -48,6 +48,13 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// Unwrap lets http.ResponseController reach the underlying ResponseWriter so
+// handlers can still access optional methods (Flush, Hijack, etc.) through the
+// middleware chain.
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 func (r *statusRecorder) Write(b []byte) (int, error) {
 	r.wroteHeader = true
 

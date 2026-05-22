@@ -36,7 +36,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) serve(ctx context.Context, ln net.Listener) error {
-	fmt.Fprintf(s.Logger, "adms: listening on %s\n", ln.Addr())
+	fmt.Fprintf(s.logger(), "adms: listening on %s\n", ln.Addr())
 
 	srv := &http.Server{
 		Handler:           s.routes(),
@@ -62,7 +62,7 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		fmt.Fprintln(s.Logger, "adms: shutting down")
+		fmt.Fprintln(s.logger(), "adms: shutting down")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
@@ -78,4 +78,12 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 
 		return nil
 	}
+}
+
+func (s *Server) logger() io.Writer {
+	if s.Logger == nil {
+		return io.Discard
+	}
+
+	return s.Logger
 }

@@ -7,7 +7,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.schemaDump)
 
+	logger := s.logger()
+
 	// logging wraps recoverer so a panic still produces an access-log line
 	// (recoverer writes the 500 to the statusRecorder injected by logging).
-	return logging(s.Logger, recoverer(s.Logger, mux))
+	return logging(logger, recoverer(logger, mux))
 }
