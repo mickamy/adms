@@ -190,6 +190,36 @@ func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
 	}
 }
 
+func TestPanicProducesLoggedFiveHundred(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+
+	panicking := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		panic("boom")
+	})
+
+	// Mirror the router's wrapping: logging(recoverer(handler)).
+	ts := httptest.NewServer(server.Logging(&logs, server.Recoverer(&logs, panicking)))
+	t.Cleanup(ts.Close)
+
+	resp := httpGet(t, ts.URL+"/")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", resp.StatusCode)
+	}
+
+	out := logs.String()
+	if !strings.Contains(out, "panic") {
+		t.Errorf("log = %q, want substring %q", out, "panic")
+	}
+
+	if !strings.Contains(out, " 500 ") {
+		t.Errorf("log = %q, want access-log line with 500", out)
+	}
+}
+
 func TestServerRunReturnsListenFailure(t *testing.T) {
 	t.Parallel()
 

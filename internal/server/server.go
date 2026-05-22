@@ -37,6 +37,9 @@ func (s *Server) Run(ctx context.Context) error {
 	srv := &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
 	}
 
 	errCh := make(chan error, 1)
@@ -62,6 +65,11 @@ func (s *Server) Run(ctx context.Context) error {
 
 		if err := srv.Shutdown(shutdownCtx); err != nil { //nolint:contextcheck
 			return fmt.Errorf("shutdown: %w", err)
+		}
+
+		// Surface any error from Serve that raced with shutdown.
+		if err := <-errCh; err != nil {
+			return fmt.Errorf("serve: %w", err)
 		}
 
 		return nil
