@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -24,8 +25,16 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	var lc net.ListenConfig
+
+	ln, err := lc.Listen(ctx, "tcp", s.Addr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	fmt.Fprintf(s.Logger, "adms: listening on %s\n", ln.Addr())
+
 	srv := &http.Server{
-		Addr:              s.Addr,
 		Handler:           s.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -33,9 +42,7 @@ func (s *Server) Run(ctx context.Context) error {
 	errCh := make(chan error, 1)
 
 	go func() {
-		fmt.Fprintf(s.Logger, "adms: listening on %s\n", s.Addr)
-
-		err := srv.ListenAndServe()
+		err := srv.Serve(ln)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 			return

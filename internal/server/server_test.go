@@ -165,6 +165,31 @@ func TestRecovererTurnsPanicInto500(t *testing.T) {
 	}
 }
 
+func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusTeapot) // ignored; first one wins.
+	})
+
+	ts := httptest.NewServer(server.Logging(&logs, handler))
+	t.Cleanup(ts.Close)
+
+	resp := httpGet(t, ts.URL+"/")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d (first WriteHeader wins)", resp.StatusCode, http.StatusNotFound)
+	}
+
+	if !strings.Contains(logs.String(), " 404 ") {
+		t.Errorf("log = %q, want substring %q", logs.String(), " 404 ")
+	}
+}
+
 func TestServerRunReturnsListenFailure(t *testing.T) {
 	t.Parallel()
 

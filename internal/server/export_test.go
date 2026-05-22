@@ -6,4 +6,5 @@ func (s *Server) Routes() http.Handler { return s.routes() }
 
 var (
 	Recoverer = recoverer
+	Logging   = logging
 )

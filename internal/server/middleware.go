@@ -39,10 +39,22 @@ type statusRecorder struct {
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
-	if !r.wroteHeader {
-		r.status = code
-		r.wroteHeader = true
+	if r.wroteHeader {
+		return
 	}
 
+	r.status = code
+	r.wroteHeader = true
 	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	r.wroteHeader = true
+
+	n, err := r.ResponseWriter.Write(b)
+	if err != nil {
+		return n, fmt.Errorf("write: %w", err)
+	}
+
+	return n, nil
 }
