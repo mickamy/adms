@@ -229,6 +229,20 @@ dsn: x`,
 			wantErr:  "driver is required",
 		},
 		{
+			name:     "whitespace-only driver treated as missing",
+			filename: "adms.yaml",
+			body: `driver: "   "
+dsn: x`,
+			wantErr: "driver is required",
+		},
+		{
+			name:     "whitespace-only dsn treated as missing",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: "   "`,
+			wantErr: "dsn is required",
+		},
+		{
 			name:     "unknown driver",
 			filename: "adms.yaml",
 			body: `driver: sqlite
