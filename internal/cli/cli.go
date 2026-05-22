@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
@@ -35,7 +37,7 @@ func Run(args []string, _, stderr io.Writer) int {
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	db, sch, err := startup(sigCtx, cfg)
+	db, err := database.Open(cfg.Driver, cfg.DSN)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
@@ -43,12 +45,27 @@ func Run(args []string, _, stderr io.Writer) int {
 	}
 	defer func() { _ = db.Close() }()
 
+	if err := pingDB(sigCtx, db.DB, cfg.Timeout); err != nil {
+		fmt.Fprintf(stderr, "adms: %v\n", err)
+
+		return exit.Error
+	}
+
+	intro, err := pickIntrospector(cfg.Driver)
+	if err != nil {
+		fmt.Fprintf(stderr, "adms: %v\n", err)
+
+		return exit.Error
+	}
+
 	srv := &server.Server{
-		Addr:    cfg.Listen,
-		Schema:  sch,
-		DB:      db.DB,
-		Dialect: db.Dialect,
-		Logger:  stderr,
+		Addr:           cfg.Listen,
+		DB:             db.DB,
+		Introspector:   intro,
+		AllowedSchemas: cfg.AllowedSchemas,
+		AllowedTables:  cfg.AllowedTables,
+		Timeout:        cfg.Timeout,
+		Logger:         stderr,
 	}
 
 	if err := srv.Run(sigCtx); err != nil {
@@ -58,41 +75,6 @@ func Run(args []string, _, stderr io.Writer) int {
 	}
 
 	return exit.OK
-}
-
-// startup opens the database, pings it, and introspects the schema, all
-// bounded by cfg.Timeout. Returns the open DB so the caller can hand it to the
-// long-running server (and Close it on exit).
-func startup(ctx context.Context, cfg config.Config) (*database.DB, schema.Schema, error) {
-	startupCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-	defer cancel()
-
-	db, err := database.Open(cfg.Driver, cfg.DSN)
-	if err != nil {
-		return nil, schema.Schema{}, fmt.Errorf("open db: %w", err)
-	}
-
-	if err := db.PingContext(startupCtx); err != nil {
-		_ = db.Close()
-
-		return nil, schema.Schema{}, fmt.Errorf("ping: %w", err)
-	}
-
-	intro, err := pickIntrospector(cfg.Driver)
-	if err != nil {
-		_ = db.Close()
-
-		return nil, schema.Schema{}, err
-	}
-
-	sch, err := intro.Introspect(startupCtx, db.DB, cfg.AllowedSchemas)
-	if err != nil {
-		_ = db.Close()
-
-		return nil, schema.Schema{}, fmt.Errorf("introspect: %w", err)
-	}
-
-	return db, filterAllowedTables(sch, cfg.AllowedTables), nil
 }
 
 func PrintUsage(w io.Writer) {
@@ -140,26 +122,15 @@ func resolveConfigPath(args []string) (string, error) {
 	}
 }
 
-func filterAllowedTables(sch schema.Schema, allowed []string) schema.Schema {
-	if len(allowed) == 0 {
-		return sch
+func pingDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {
+	pingCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if err := db.PingContext(pingCtx); err != nil {
+		return fmt.Errorf("ping: %w", err)
 	}
 
-	allow := make(map[string]struct{}, len(allowed))
-	for _, n := range allowed {
-		allow[n] = struct{}{}
-	}
-
-	filtered := make([]schema.Table, 0, len(sch.Tables))
-	for _, t := range sch.Tables {
-		if _, ok := allow[t.Name]; ok {
-			filtered = append(filtered, t)
-		}
-	}
-
-	sch.Tables = filtered
-
-	return sch
+	return nil
 }
 
 func pickIntrospector(d database.Driver) (schema.Introspector, error) {

@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net"
@@ -23,14 +24,28 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 	var logs syncBuffer
 
 	srv := &server.Server{
-		Schema: sch,
-		Logger: &logs,
+		Introspector: stubIntrospector{schema: sch},
+		Timeout:      time.Second,
+		Logger:       &logs,
+	}
+
+	if err := srv.Prepare(t.Context()); err != nil {
+		t.Fatalf("prepare: %v", err)
 	}
 
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
 
 	return ts, &logs
+}
+
+type stubIntrospector struct {
+	schema schema.Schema
+	err    error
+}
+
+func (s stubIntrospector) Introspect(_ context.Context, _ *sql.DB, _ []string) (schema.Schema, error) {
+	return s.schema, s.err
 }
 
 // syncBuffer wraps a bytes.Buffer with a mutex so concurrent writes from the
@@ -215,7 +230,14 @@ func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
 func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
-	srv := &server.Server{} // Logger left nil
+	srv := &server.Server{ // Logger left nil
+		Introspector: stubIntrospector{},
+		Timeout:      time.Second,
+	}
+
+	if err := srv.Prepare(t.Context()); err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
 
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
@@ -298,8 +320,10 @@ func TestServerRunReturnsListenFailure(t *testing.T) {
 	var logs syncBuffer
 
 	srv := &server.Server{
-		Addr:   "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
-		Logger: &logs,
+		Addr:         "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
+		Introspector: stubIntrospector{},
+		Timeout:      time.Second,
+		Logger:       &logs,
 	}
 
 	if err := srv.Run(t.Context()); err == nil {
