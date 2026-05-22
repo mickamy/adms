@@ -65,6 +65,10 @@ func buildConfig(c config) (Config, error) {
 			return Config{}, fmt.Errorf("invalid timeout %q: %w", c.Timeout, err)
 		}
 
+		if d <= 0 {
+			return Config{}, fmt.Errorf("invalid timeout %q: must be positive", c.Timeout)
+		}
+
 		timeout = d
 	}
 

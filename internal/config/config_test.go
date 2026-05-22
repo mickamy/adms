@@ -208,6 +208,22 @@ timeout: notaduration`,
 			wantErr: `invalid timeout "notaduration"`,
 		},
 		{
+			name:     "zero timeout rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+timeout: 0s`,
+			wantErr: "must be positive",
+		},
+		{
+			name:     "negative timeout rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+timeout: -5s`,
+			wantErr: "must be positive",
+		},
+		{
 			name:     "yaml unknown field is rejected",
 			filename: "adms.yaml",
 			body: `driver: postgres
