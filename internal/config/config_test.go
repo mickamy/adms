@@ -361,6 +361,30 @@ func TestDetect(t *testing.T) {
 			t.Errorf("Detect() error = %v, want ErrNoConfigFound (directory should be ignored)", err)
 		}
 	})
+
+	t.Run("returns wrapped error when stat fails for reasons other than not-exist", func(t *testing.T) {
+		t.Parallel()
+
+		// Using a regular file as the dir argument makes os.Stat on any child
+		// path return ENOTDIR, which is not fs.ErrNotExist.
+		notDir := filepath.Join(t.TempDir(), "regular-file")
+		if err := os.WriteFile(notDir, []byte{}, 0o600); err != nil {
+			t.Fatalf("write fixture: %v", err)
+		}
+
+		_, err := config.Detect(notDir)
+		if err == nil {
+			t.Fatal("Detect() error = nil, want non-nil error")
+		}
+
+		if errors.Is(err, config.ErrNoConfigFound) {
+			t.Errorf("Detect() returned ErrNoConfigFound for ENOTDIR-like failure: %v", err)
+		}
+
+		if !strings.Contains(err.Error(), "stat") {
+			t.Errorf("Detect() error = %q, want substring %q", err, "stat")
+		}
+	})
 }
 
 func assertConfigEqual(t *testing.T, got, want config.Config) {
