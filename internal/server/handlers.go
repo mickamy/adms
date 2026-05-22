@@ -13,14 +13,17 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) schemaDump(w http.ResponseWriter, _ *http.Request) {
-	body, err := json.MarshalIndent(s.Schema, "", "  ")
-	if err != nil {
-		fmt.Fprintf(s.logger(), "adms: encode schema: %v\n", err)
+	s.schemaJSONOnce.Do(func() {
+		s.schemaJSON, s.schemaJSONErr = json.MarshalIndent(s.Schema, "", "  ")
+	})
+
+	if s.schemaJSONErr != nil {
+		fmt.Fprintf(s.logger(), "adms: encode schema: %v\n", s.schemaJSONErr)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(body)
+	_, _ = w.Write(s.schemaJSON)
 }

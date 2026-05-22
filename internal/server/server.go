@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/mickamy/adms/internal/dialect"
@@ -22,6 +23,10 @@ type Server struct {
 	DB      *sql.DB
 	Dialect dialect.Dialect
 	Logger  io.Writer
+
+	schemaJSONOnce sync.Once
+	schemaJSON     []byte
+	schemaJSONErr  error
 }
 
 func (s *Server) Run(ctx context.Context) error {

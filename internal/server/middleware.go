@@ -11,7 +11,7 @@ func recoverer(out io.Writer, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				fmt.Fprintf(out, "adms: panic in %s %s: %v\n", r.Method, r.URL.Path, rec)
+				fmt.Fprintf(out, "adms: panic in %s %s: %v\n", r.Method, r.URL.EscapedPath(), rec)
 				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
 		}()
@@ -27,7 +27,8 @@ func logging(out io.Writer, next http.Handler) http.Handler {
 
 		next.ServeHTTP(rec, r)
 
-		fmt.Fprintf(out, "%s %s %d %s\n", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Microsecond))
+		fmt.Fprintf(out, "%s %s %d %s\n",
+			r.Method, r.URL.EscapedPath(), rec.status, time.Since(start).Round(time.Microsecond))
 	})
 }
 
