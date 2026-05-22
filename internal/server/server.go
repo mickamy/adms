@@ -76,12 +76,23 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
-		if err := srv.Shutdown(shutdownCtx); err != nil { //nolint:contextcheck
-			return fmt.Errorf("shutdown: %w", err)
+		shutdownErr := srv.Shutdown(shutdownCtx) //nolint:contextcheck
+		if shutdownErr != nil {
+			// Graceful shutdown failed (ctx timeout, hung handlers). Force-close
+			// the listener and any active connections so we do not leak them.
+			_ = srv.Close()
 		}
 
-		if err := <-errCh; err != nil {
-			return fmt.Errorf("serve: %w", err)
+		// Wait for Serve to return regardless of shutdown outcome, so we surface
+		// a serve error that raced with the shutdown.
+		serveErr := <-errCh
+
+		if shutdownErr != nil {
+			return fmt.Errorf("shutdown: %w", shutdownErr)
+		}
+
+		if serveErr != nil {
+			return fmt.Errorf("serve: %w", serveErr)
 		}
 
 		return nil
