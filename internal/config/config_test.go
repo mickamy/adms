@@ -116,6 +116,42 @@ allowed_schemas: ["${TEST_SCHEMA}", "static"]`,
 			},
 		},
 		{
+			name:     "string slice entries are trimmed and empties dropped",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+allowed_schemas: ["public", "  reporting  ", "", " "]
+allowed_tables: [" users ", "posts", ""]
+cors_origins: ["", "https://example.com  "]`,
+			want: config.Config{
+				Driver:         database.DriverPostgres,
+				DSN:            "x",
+				Listen:         config.DefaultListen,
+				AllowedSchemas: []string{"public", "reporting"},
+				AllowedTables:  []string{"users", "posts"},
+				CORSOrigins:    []string{"https://example.com"},
+				Timeout:        config.DefaultTimeout,
+				LogLevel:       config.DefaultLogLevel,
+				UI:             config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
+			name:     "env value expanding to empty is dropped from string slices",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+allowed_tables: ["users", "${UNSET_VAR}", "posts"]`,
+			want: config.Config{
+				Driver:        database.DriverPostgres,
+				DSN:           "x",
+				Listen:        config.DefaultListen,
+				AllowedTables: []string{"users", "posts"},
+				Timeout:       config.DefaultTimeout,
+				LogLevel:      config.DefaultLogLevel,
+				UI:            config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
 			name:     "yaml env unset expands to empty -> missing dsn",
 			filename: "adms.yaml",
 			body: `driver: postgres

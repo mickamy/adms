@@ -76,6 +76,7 @@ func loadFile(path string) (config, error) {
 	}
 
 	expandEnv(&c)
+	normalize(&c)
 
 	return c, nil
 }
@@ -103,4 +104,27 @@ func expandEnv(c *config) {
 	for i, s := range c.CORSOrigins {
 		c.CORSOrigins[i] = os.ExpandEnv(s)
 	}
+}
+
+// normalize trims whitespace and drops empty entries from string-slice fields,
+// preserving the forgiving behaviour the previous CSV flag parser had.
+func normalize(c *config) {
+	c.AllowedSchemas = trimAndDropEmpty(c.AllowedSchemas)
+	c.AllowedTables = trimAndDropEmpty(c.AllowedTables)
+	c.CORSOrigins = trimAndDropEmpty(c.CORSOrigins)
+}
+
+func trimAndDropEmpty(ss []string) []string {
+	if len(ss) == 0 {
+		return ss
+	}
+
+	out := make([]string, 0, len(ss))
+	for _, s := range ss {
+		if t := strings.TrimSpace(s); t != "" {
+			out = append(out, t)
+		}
+	}
+
+	return out
 }
