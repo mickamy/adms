@@ -20,7 +20,11 @@ import (
 func Parse(values url.Values) (Query, error) {
 	var q Query
 
-	if s := values.Get("select"); s != "" {
+	s, err := singleValue(values, "select")
+	if err != nil {
+		return Query{}, err
+	}
+	if s != "" {
 		items, err := parseSelect(s)
 		if err != nil {
 			return Query{}, err
@@ -28,7 +32,11 @@ func Parse(values url.Values) (Query, error) {
 		q.Select = items
 	}
 
-	if s := values.Get("order"); s != "" {
+	s, err = singleValue(values, "order")
+	if err != nil {
+		return Query{}, err
+	}
+	if s != "" {
 		items, err := parseOrder(s)
 		if err != nil {
 			return Query{}, err
@@ -36,7 +44,11 @@ func Parse(values url.Values) (Query, error) {
 		q.Order = items
 	}
 
-	if s := values.Get("limit"); s != "" {
+	s, err = singleValue(values, "limit")
+	if err != nil {
+		return Query{}, err
+	}
+	if s != "" {
 		n, err := parseNonNegativeInt(s)
 		if err != nil {
 			return Query{}, fmt.Errorf("invalid limit %q: %w", s, err)
@@ -44,7 +56,11 @@ func Parse(values url.Values) (Query, error) {
 		q.Limit = &n
 	}
 
-	if s := values.Get("offset"); s != "" {
+	s, err = singleValue(values, "offset")
+	if err != nil {
+		return Query{}, err
+	}
+	if s != "" {
 		n, err := parseNonNegativeInt(s)
 		if err != nil {
 			return Query{}, fmt.Errorf("invalid offset %q: %w", s, err)
@@ -66,6 +82,22 @@ func Parse(values url.Values) (Query, error) {
 	}
 
 	return q, nil
+}
+
+// singleValue returns the sole value for key, or "" if key is absent.
+// It errors when the key appears more than once; this protects against
+// ambiguous requests like "?limit=10&limit=20".
+func singleValue(values url.Values, key string) (string, error) {
+	vs := values[key]
+	if len(vs) > 1 {
+		return "", fmt.Errorf("%s may appear at most once, got %d values", key, len(vs))
+	}
+
+	if len(vs) == 0 {
+		return "", nil
+	}
+
+	return vs[0], nil
 }
 
 func parseFilters(values url.Values) ([]FilterNode, error) {
@@ -141,6 +173,12 @@ func parseOrder(s string) ([]OrderItem, error) {
 			case "desc":
 				col = p[:i]
 				desc = true
+			default:
+				return nil, fmt.Errorf("invalid order direction in %q: want asc or desc", p)
+			}
+
+			if strings.Contains(col, ".") {
+				return nil, fmt.Errorf("invalid order column %q: contains '.'", col)
 			}
 		}
 
@@ -187,6 +225,9 @@ func parsePredicate(column, value string) (Predicate, error) {
 			return Predicate{}, fmt.Errorf("invalid in value %q: want (v1,v2,...)", val)
 		}
 		val = val[1 : len(val)-1]
+		if val == "" {
+			return Predicate{}, errors.New("invalid in value: list is empty")
+		}
 	case OpEq, OpNeq, OpGt, OpGte, OpLt, OpLte, OpLike, OpILike:
 		// scalar operators take the value as-is
 	}

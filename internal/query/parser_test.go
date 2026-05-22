@@ -188,6 +188,7 @@ func TestParse_Error(t *testing.T) {
 		{"missing operator separator", url.Values{"id": {"42"}}},
 		{"invalid is value", url.Values{"deleted_at": {"is.maybe"}}},
 		{"in value missing parens", url.Values{"id": {"in.1,2,3"}}},
+		{"in empty list", url.Values{"id": {"in.()"}}},
 		{"limit non-integer", url.Values{"limit": {"abc"}}},
 		{"limit negative", url.Values{"limit": {"-1"}}},
 		{"offset non-integer", url.Values{"offset": {"abc"}}},
@@ -198,6 +199,12 @@ func TestParse_Error(t *testing.T) {
 		{"or group unmatched close", url.Values{"or": {"a.eq.1)"}}},
 		{"nested group unmatched", url.Values{"or": {"(a.eq.1,and=(b.eq.2)"}}},
 		{"order empty item", url.Values{"order": {"name,,id"}}},
+		{"order suffix not asc or desc", url.Values{"order": {"name.foo"}}},
+		{"order extra dots", url.Values{"order": {"name.asc.desc"}}},
+		{"duplicate select", url.Values{"select": {"id", "name"}}},
+		{"duplicate order", url.Values{"order": {"id.asc", "name.asc"}}},
+		{"duplicate limit", url.Values{"limit": {"10", "20"}}},
+		{"duplicate offset", url.Values{"offset": {"0", "10"}}},
 	}
 
 	for _, tt := range tests {
