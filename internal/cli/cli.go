@@ -2,22 +2,22 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
-	"sort"
-	"strings"
 	"syscall"
+	"time"
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
 	"github.com/mickamy/adms/internal/exit"
-	"github.com/mickamy/adms/internal/schema"
+	"github.com/mickamy/adms/internal/server"
 )
 
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(args []string, _, stderr io.Writer) int {
 	path, err := resolveConfigPath(args)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
@@ -33,11 +33,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return exit.Usage
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-	defer cancel()
 
 	db, err := database.Open(cfg.Driver, cfg.DSN)
 	if err != nil {
@@ -47,29 +44,24 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	defer func() { _ = db.Close() }()
 
-	if err := db.PingContext(ctx); err != nil {
-		fmt.Fprintf(stderr, "adms: ping failed: %v\n", err)
+	if err := pingDB(sigCtx, db.DB, cfg.Timeout); err != nil {
+		fmt.Fprintf(stderr, "adms: %v\n", err)
 
 		return exit.Error
 	}
 
-	intro, err := pickIntrospector(cfg.Driver)
+	srv, err := server.New(cfg, db.DB, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
 		return exit.Error
 	}
 
-	sch, err := intro.Introspect(ctx, db.DB, cfg.AllowedSchemas)
-	if err != nil {
-		fmt.Fprintf(stderr, "adms: introspect failed: %v\n", err)
+	if err := srv.Run(sigCtx); err != nil {
+		fmt.Fprintf(stderr, "adms: %v\n", err)
 
 		return exit.Error
 	}
-
-	sch = filterAllowedTables(sch, cfg.AllowedTables)
-
-	printSummary(stdout, cfg, sch)
 
 	return exit.OK
 }
@@ -119,67 +111,13 @@ func resolveConfigPath(args []string) (string, error) {
 	}
 }
 
-func printSummary(w io.Writer, cfg config.Config, sch schema.Schema) {
-	counts := make(map[string]int)
-	for _, tbl := range sch.Tables {
-		counts[tbl.Schema]++
+func pingDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {
+	pingCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if err := db.PingContext(pingCtx); err != nil {
+		return fmt.Errorf("ping: %w", err)
 	}
 
-	displayed := cfg.AllowedSchemas
-	if len(displayed) == 0 {
-		if len(counts) > 0 {
-			displayed = make([]string, 0, len(counts))
-			for s := range counts {
-				displayed = append(displayed, s)
-			}
-
-			sort.Strings(displayed)
-		} else {
-			displayed = []string{"(no tables found)"}
-		}
-	}
-
-	fmt.Fprintf(w, "ok: connected, introspected %d tables in schema(s) %s\n",
-		len(sch.Tables), strings.Join(displayed, ", "))
-
-	if len(displayed) == 1 && displayed[0] == "(no tables found)" {
-		return
-	}
-
-	for _, s := range displayed {
-		fmt.Fprintf(w, "  %s: %d tables\n", s, counts[s])
-	}
-}
-
-func filterAllowedTables(sch schema.Schema, allowed []string) schema.Schema {
-	if len(allowed) == 0 {
-		return sch
-	}
-
-	allow := make(map[string]struct{}, len(allowed))
-	for _, n := range allowed {
-		allow[n] = struct{}{}
-	}
-
-	filtered := make([]schema.Table, 0, len(sch.Tables))
-	for _, t := range sch.Tables {
-		if _, ok := allow[t.Name]; ok {
-			filtered = append(filtered, t)
-		}
-	}
-
-	sch.Tables = filtered
-
-	return sch
-}
-
-func pickIntrospector(d database.Driver) (schema.Introspector, error) {
-	switch d {
-	case database.DriverPostgres:
-		return schema.PostgresIntrospector(), nil
-	case database.DriverMySQL:
-		return schema.MySQLIntrospector(), nil
-	default:
-		return nil, fmt.Errorf("unknown driver: %q", d)
-	}
+	return nil
 }
