@@ -1,7 +1,8 @@
-APP_NAME  = adms
-BUILD_DIR = bin
+APP_NAME       = adms
+BUILD_DIR      = bin
+DOCKER_COMPOSE ?= docker compose
 
-.PHONY: all build install uninstall clean test test-integration lint
+.PHONY: all build install uninstall clean test test-integration compose-up compose-down lint
 
 all: build
 
@@ -37,9 +38,13 @@ test:
 	go test ./... -race
 
 test-integration:
-	@trap 'docker compose down' EXIT; \
-		docker compose up -d --wait && \
-		go test -tags=integration ./... -race
+	go test -tags=integration ./... -race $(GOTESTFLAGS)
+
+compose-up:
+	$(DOCKER_COMPOSE) up -d --wait
+
+compose-down:
+	$(DOCKER_COMPOSE) down
 
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { \

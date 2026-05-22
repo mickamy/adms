@@ -44,6 +44,35 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: ./cover.out
+          flags: unit
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Start service containers
+        run: make compose-up
+
+      - name: Run integration tests
+        run: make test-integration GOTESTFLAGS="-covermode=atomic -coverprofile=cover.out"
+
+      - name: Stop service containers
+        if: always()
+        run: make compose-down
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./cover.out
+          flags: integration
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
