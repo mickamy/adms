@@ -184,6 +184,16 @@ typo_field: oops`,
 			wantErr: "parse yaml",
 		},
 		{
+			name:     "yaml multi-document is rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+---
+driver: mysql
+dsn: y`,
+			wantErr: "multiple YAML documents are not supported",
+		},
+		{
 			name:     "toml unknown field is rejected",
 			filename: "adms.toml",
 			body: `driver = "postgres"

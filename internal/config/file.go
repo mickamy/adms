@@ -51,6 +51,14 @@ func loadFile(path string) (config, error) {
 		if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
 			return config{}, fmt.Errorf("parse yaml: %w", err)
 		}
+
+		var extra config
+		switch err := dec.Decode(&extra); {
+		case err == nil:
+			return config{}, errors.New("parse yaml: multiple YAML documents are not supported")
+		case !errors.Is(err, io.EOF):
+			return config{}, fmt.Errorf("parse yaml: %w", err)
+		}
 	case ".toml":
 		meta, err := toml.Decode(expanded, &c)
 		if err != nil {
