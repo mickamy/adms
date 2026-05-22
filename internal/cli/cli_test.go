@@ -126,6 +126,7 @@ func TestPrintUsage(t *testing.T) {
 		"--version",
 		"--help",
 		"${VAR}",
+		"Literal $ cannot be escaped",
 	} {
 		if !strings.Contains(buf.String(), want) {
 			t.Errorf("PrintUsage output missing %q\n---output---\n%s", want, buf.String())
