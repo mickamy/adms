@@ -50,7 +50,7 @@ func Load(path string) (Config, error) {
 }
 
 func buildConfig(c config) (Config, error) {
-	if strings.TrimSpace(c.Driver) == "" {
+	if c.Driver == "" {
 		return Config{}, errors.New("driver is required")
 	}
 
@@ -59,7 +59,7 @@ func buildConfig(c config) (Config, error) {
 		return Config{}, err
 	}
 
-	if strings.TrimSpace(c.DSN) == "" {
+	if c.DSN == "" {
 		return Config{}, errors.New("dsn is required")
 	}
 

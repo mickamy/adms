@@ -106,9 +106,18 @@ func expandEnv(c *config) {
 	}
 }
 
-// normalize trims whitespace and drops empty entries from string-slice fields,
-// preserving the forgiving behaviour the previous CSV flag parser had.
+// normalize trims whitespace from every string field and drops empty entries
+// from string-slice fields, so downstream validation and default-application
+// only see clean values.
 func normalize(c *config) {
+	c.Driver = strings.TrimSpace(c.Driver)
+	c.DSN = strings.TrimSpace(c.DSN)
+	c.Listen = strings.TrimSpace(c.Listen)
+	c.Timeout = strings.TrimSpace(c.Timeout)
+	c.AuthTokenEnv = strings.TrimSpace(c.AuthTokenEnv)
+	c.LogLevel = strings.TrimSpace(c.LogLevel)
+	c.UI.Listen = strings.TrimSpace(c.UI.Listen)
+
 	c.AllowedSchemas = trimAndDropEmpty(c.AllowedSchemas)
 	c.AllowedTables = trimAndDropEmpty(c.AllowedTables)
 	c.CORSOrigins = trimAndDropEmpty(c.CORSOrigins)

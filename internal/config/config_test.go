@@ -274,6 +274,25 @@ timeout: -5s`,
 			wantErr: "must be positive",
 		},
 		{
+			name:     "whitespace around scalar string fields is normalized",
+			filename: "adms.yaml",
+			body: `driver: "  postgres  "
+dsn: "  postgres://x  "
+listen: "   "
+timeout: "  1m  "
+log_level: "   "
+ui:
+  listen: "   "`,
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      "postgres://x",
+				Listen:   config.DefaultListen,
+				Timeout:  time.Minute,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
 			name:     "yaml unknown field is rejected",
 			filename: "adms.yaml",
 			body: `driver: postgres
