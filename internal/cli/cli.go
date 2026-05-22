@@ -7,17 +7,16 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"sort"
-	"strings"
 	"syscall"
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
 	"github.com/mickamy/adms/internal/exit"
 	"github.com/mickamy/adms/internal/schema"
+	"github.com/mickamy/adms/internal/server"
 )
 
-func Run(args []string, stdout, stderr io.Writer) int {
+func Run(args []string, _, stderr io.Writer) int {
 	path, err := resolveConfigPath(args)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
@@ -33,13 +32,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return exit.Usage
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
-	defer cancel()
-
-	db, err := database.Open(cfg.Driver, cfg.DSN)
+	db, sch, err := startup(sigCtx, cfg)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
@@ -47,31 +43,56 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 	defer func() { _ = db.Close() }()
 
-	if err := db.PingContext(ctx); err != nil {
-		fmt.Fprintf(stderr, "adms: ping failed: %v\n", err)
-
-		return exit.Error
+	srv := &server.Server{
+		Addr:    cfg.Listen,
+		Schema:  sch,
+		DB:      db.DB,
+		Dialect: db.Dialect,
+		Logger:  stderr,
 	}
 
-	intro, err := pickIntrospector(cfg.Driver)
-	if err != nil {
+	if err := srv.Run(sigCtx); err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
 		return exit.Error
 	}
 
-	sch, err := intro.Introspect(ctx, db.DB, cfg.AllowedSchemas)
-	if err != nil {
-		fmt.Fprintf(stderr, "adms: introspect failed: %v\n", err)
+	return exit.OK
+}
 
-		return exit.Error
+// startup opens the database, pings it, and introspects the schema, all
+// bounded by cfg.Timeout. Returns the open DB so the caller can hand it to the
+// long-running server (and Close it on exit).
+func startup(ctx context.Context, cfg config.Config) (*database.DB, schema.Schema, error) {
+	startupCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
+
+	db, err := database.Open(cfg.Driver, cfg.DSN)
+	if err != nil {
+		return nil, schema.Schema{}, fmt.Errorf("open db: %w", err)
 	}
 
-	sch = filterAllowedTables(sch, cfg.AllowedTables)
+	if err := db.PingContext(startupCtx); err != nil {
+		_ = db.Close()
 
-	printSummary(stdout, cfg, sch)
+		return nil, schema.Schema{}, fmt.Errorf("ping: %w", err)
+	}
 
-	return exit.OK
+	intro, err := pickIntrospector(cfg.Driver)
+	if err != nil {
+		_ = db.Close()
+
+		return nil, schema.Schema{}, err
+	}
+
+	sch, err := intro.Introspect(startupCtx, db.DB, cfg.AllowedSchemas)
+	if err != nil {
+		_ = db.Close()
+
+		return nil, schema.Schema{}, fmt.Errorf("introspect: %w", err)
+	}
+
+	return db, filterAllowedTables(sch, cfg.AllowedTables), nil
 }
 
 func PrintUsage(w io.Writer) {
@@ -116,38 +137,6 @@ func resolveConfigPath(args []string) (string, error) {
 		return args[0], nil
 	default:
 		return "", fmt.Errorf("too many arguments (got %d, want at most 1)", len(args))
-	}
-}
-
-func printSummary(w io.Writer, cfg config.Config, sch schema.Schema) {
-	counts := make(map[string]int)
-	for _, tbl := range sch.Tables {
-		counts[tbl.Schema]++
-	}
-
-	displayed := cfg.AllowedSchemas
-	if len(displayed) == 0 {
-		if len(counts) > 0 {
-			displayed = make([]string, 0, len(counts))
-			for s := range counts {
-				displayed = append(displayed, s)
-			}
-
-			sort.Strings(displayed)
-		} else {
-			displayed = []string{"(no tables found)"}
-		}
-	}
-
-	fmt.Fprintf(w, "ok: connected, introspected %d tables in schema(s) %s\n",
-		len(sch.Tables), strings.Join(displayed, ", "))
-
-	if len(displayed) == 1 && displayed[0] == "(no tables found)" {
-		return
-	}
-
-	for _, s := range displayed {
-		fmt.Fprintf(w, "  %s: %d tables\n", s, counts[s])
 	}
 }
 
