@@ -243,6 +243,49 @@ typo_field = "oops"`,
 	}
 }
 
+func TestLoad_ParseErrorIncludesPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		filename string
+		body     string
+	}{
+		{
+			name:     "yaml type mismatch",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: [not, a, string]`,
+		},
+		{
+			name:     "toml syntax error",
+			filename: "adms.toml",
+			body: `driver = "postgres"
+[unterminated`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := filepath.Join(t.TempDir(), tt.filename)
+			if err := os.WriteFile(path, []byte(tt.body), 0o600); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
+
+			_, err := config.Load(path)
+			if err == nil {
+				t.Fatal("Load() error = nil, want non-nil")
+			}
+
+			if !strings.Contains(err.Error(), path) {
+				t.Errorf("Load() error = %q, want substring %q", err, path)
+			}
+		})
+	}
+}
+
 func TestLoad_MissingFile(t *testing.T) {
 	t.Parallel()
 

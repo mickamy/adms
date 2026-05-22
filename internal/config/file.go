@@ -49,20 +49,20 @@ func loadFile(path string) (config, error) {
 		dec.KnownFields(true)
 
 		if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
-			return config{}, fmt.Errorf("parse yaml: %w", err)
+			return config{}, fmt.Errorf("%s: parse yaml: %w", path, err)
 		}
 
 		var extra config
 		switch err := dec.Decode(&extra); {
 		case err == nil:
-			return config{}, errors.New("parse yaml: multiple YAML documents are not supported")
+			return config{}, fmt.Errorf("%s: parse yaml: multiple YAML documents are not supported", path)
 		case !errors.Is(err, io.EOF):
-			return config{}, fmt.Errorf("parse yaml: %w", err)
+			return config{}, fmt.Errorf("%s: parse yaml: %w", path, err)
 		}
 	case ".toml":
 		meta, err := toml.Decode(expanded, &c)
 		if err != nil {
-			return config{}, fmt.Errorf("parse toml: %w", err)
+			return config{}, fmt.Errorf("%s: parse toml: %w", path, err)
 		}
 
 		if undecoded := meta.Undecoded(); len(undecoded) > 0 {
@@ -71,10 +71,10 @@ func loadFile(path string) (config, error) {
 				keys = append(keys, k.String())
 			}
 
-			return config{}, fmt.Errorf("unknown toml key(s): %s", strings.Join(keys, ", "))
+			return config{}, fmt.Errorf("%s: unknown toml key(s): %s", path, strings.Join(keys, ", "))
 		}
 	default:
-		return config{}, fmt.Errorf("unsupported config extension %q (want .yaml, .yml, or .toml)", ext)
+		return config{}, fmt.Errorf("%s: unsupported config extension %q (want .yaml, .yml, or .toml)", path, ext)
 	}
 
 	return c, nil
