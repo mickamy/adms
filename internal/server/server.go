@@ -33,7 +33,7 @@ type Server struct {
 func New(cfg config.Config, db *sql.DB, logger io.Writer) (*Server, error) {
 	intro, err := cfg.Driver.Introspector()
 	if err != nil {
-		return nil, err //nolint:wrapcheck // Driver.Introspector already prefixes "database:".
+		return nil, err //nolint:wrapcheck // Driver.Introspector returns a descriptive error already.
 	}
 
 	return newServer(cfg, db, intro, logger)
@@ -111,7 +111,9 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 		defer cancel()
 
 		shutdownErr := srv.Shutdown(shutdownCtx) //nolint:contextcheck
-		if shutdownErr != nil {
+
+		realShutdownErr := shutdownErr != nil && !errors.Is(shutdownErr, http.ErrServerClosed)
+		if realShutdownErr {
 			// Graceful shutdown failed (ctx timeout, hung handlers). Force-close
 			// the listener and any active connections so we do not leak them.
 			_ = srv.Close()
@@ -121,12 +123,14 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 		// a serve error that raced with the shutdown.
 		serveErr := <-errCh
 
-		if shutdownErr != nil {
-			return fmt.Errorf("shutdown: %w", shutdownErr)
-		}
-
+		// Prefer serveErr when both fail: Shutdown's ErrServerClosed is just a
+		// side effect of Serve having already exited.
 		if serveErr != nil {
 			return fmt.Errorf("serve: %w", serveErr)
+		}
+
+		if realShutdownErr {
+			return fmt.Errorf("shutdown: %w", shutdownErr)
 		}
 
 		return nil

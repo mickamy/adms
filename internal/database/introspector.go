@@ -15,6 +15,6 @@ func (d Driver) Introspector() (schema.Introspector, error) {
 	case DriverMySQL:
 		return schema.MySQLIntrospector(), nil
 	default:
-		return nil, fmt.Errorf("database: unknown driver %q", d)
+		return nil, fmt.Errorf("unknown driver: %q", d)
 	}
 }
