@@ -14,7 +14,6 @@ import (
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
 	"github.com/mickamy/adms/internal/exit"
-	"github.com/mickamy/adms/internal/schema"
 	"github.com/mickamy/adms/internal/server"
 )
 
@@ -51,21 +50,11 @@ func Run(args []string, _, stderr io.Writer) int {
 		return exit.Error
 	}
 
-	intro, err := pickIntrospector(cfg.Driver)
+	srv, err := server.New(cfg, db.DB, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
 		return exit.Error
-	}
-
-	srv := &server.Server{
-		Addr:           cfg.Listen,
-		DB:             db.DB,
-		Introspector:   intro,
-		AllowedSchemas: cfg.AllowedSchemas,
-		AllowedTables:  cfg.AllowedTables,
-		Timeout:        cfg.Timeout,
-		Logger:         stderr,
 	}
 
 	if err := srv.Run(sigCtx); err != nil {
@@ -131,15 +120,4 @@ func pingDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {
 	}
 
 	return nil
-}
-
-func pickIntrospector(d database.Driver) (schema.Introspector, error) {
-	switch d {
-	case database.DriverPostgres:
-		return schema.PostgresIntrospector(), nil
-	case database.DriverMySQL:
-		return schema.MySQLIntrospector(), nil
-	default:
-		return nil, fmt.Errorf("unknown driver: %q", d)
-	}
 }

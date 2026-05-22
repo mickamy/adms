@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/schema"
 	"github.com/mickamy/adms/internal/server"
 )
@@ -23,10 +24,14 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 
 	var logs syncBuffer
 
-	srv := &server.Server{
-		Introspector: stubIntrospector{schema: sch},
-		Timeout:      time.Second,
-		Logger:       &logs,
+	srv, err := server.NewWithIntrospector(
+		config.Config{Timeout: time.Second},
+		nil,
+		stubIntrospector{schema: sch},
+		&logs,
+	)
+	if err != nil {
+		t.Fatalf("server.NewWithIntrospector: %v", err)
 	}
 
 	if err := srv.Prepare(t.Context()); err != nil {
@@ -230,9 +235,14 @@ func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
 func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
-	srv := &server.Server{ // Logger left nil
-		Introspector: stubIntrospector{},
-		Timeout:      time.Second,
+	srv, err := server.NewWithIntrospector(
+		config.Config{Timeout: time.Second},
+		nil,
+		stubIntrospector{},
+		nil, // Logger left nil
+	)
+	if err != nil {
+		t.Fatalf("server.NewWithIntrospector: %v", err)
 	}
 
 	if err := srv.Prepare(t.Context()); err != nil {
@@ -314,16 +324,57 @@ func TestPanicProducesLoggedFiveHundred(t *testing.T) {
 	}
 }
 
+func TestNewRejectsUnknownDriver(t *testing.T) {
+	t.Parallel()
+
+	_, err := server.New(
+		config.Config{Timeout: time.Second}, // Driver left empty/unknown
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("New() error = nil, want non-nil for unknown driver")
+	}
+
+	if !strings.Contains(err.Error(), "unknown driver") {
+		t.Errorf("New() error = %q, want substring %q", err, "unknown driver")
+	}
+}
+
+func TestNewRequiresPositiveTimeout(t *testing.T) {
+	t.Parallel()
+
+	_, err := server.NewWithIntrospector(
+		config.Config{},
+		nil,
+		stubIntrospector{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("NewWithIntrospector() error = nil, want non-nil when Timeout is zero")
+	}
+
+	if !strings.Contains(err.Error(), "timeout must be positive") {
+		t.Errorf("NewWithIntrospector() error = %q, want substring %q", err, "timeout must be positive")
+	}
+}
+
 func TestServerRunReturnsListenFailure(t *testing.T) {
 	t.Parallel()
 
 	var logs syncBuffer
 
-	srv := &server.Server{
-		Addr:         "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
-		Introspector: stubIntrospector{},
-		Timeout:      time.Second,
-		Logger:       &logs,
+	srv, err := server.NewWithIntrospector(
+		config.Config{
+			Listen:  "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
+			Timeout: time.Second,
+		},
+		nil,
+		stubIntrospector{},
+		&logs,
+	)
+	if err != nil {
+		t.Fatalf("server.NewWithIntrospector: %v", err)
 	}
 
 	if err := srv.Run(t.Context()); err == nil {
@@ -345,7 +396,15 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 
 	var logs syncBuffer
 
-	srv := &server.Server{Logger: &logs}
+	srv, err := server.NewWithIntrospector(
+		config.Config{Timeout: time.Second},
+		nil,
+		stubIntrospector{},
+		&logs,
+	)
+	if err != nil {
+		t.Fatalf("server.NewWithIntrospector: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
