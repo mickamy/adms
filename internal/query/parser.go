@@ -201,7 +201,7 @@ func parsePredicate(column, value string) (Predicate, error) {
 	}
 
 	not := false
-	raw := value
+	raw := strings.TrimSpace(value)
 
 	if strings.HasPrefix(raw, "not.") {
 		not = true

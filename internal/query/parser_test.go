@@ -155,6 +155,20 @@ func TestParse_OK(t *testing.T) {
 			},
 		},
 		{
+			name: "filter value trims surrounding whitespace",
+			in:   url.Values{"status": {" eq.active "}},
+			want: query.Query{
+				Filter: query.Predicate{Column: "status", Op: query.OpEq, Value: "active"},
+			},
+		},
+		{
+			name: "filter value preserves inner whitespace",
+			in:   url.Values{"name": {" like.%foo bar% "}},
+			want: query.Query{
+				Filter: query.Predicate{Column: "name", Op: query.OpLike, Value: "%foo bar%"},
+			},
+		},
+		{
 			name: "limit and offset",
 			in:   url.Values{"limit": {"20"}, "offset": {"40"}},
 			want: query.Query{
