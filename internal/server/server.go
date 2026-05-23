@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mickamy/adms/internal/config"
+	"github.com/mickamy/adms/internal/dialect"
 	"github.com/mickamy/adms/internal/schema"
 )
 
@@ -21,13 +22,17 @@ type Server struct {
 	addr           string
 	db             *sql.DB
 	introspector   schema.Introspector
+	dialect        dialect.Dialect
 	allowedSchemas []string
 	allowedTables  []string
+	defaultLimit   int
+	maxLimit       int
 	timeout        time.Duration
 	logger         io.Writer
 
 	schema     schema.Schema
 	schemaJSON []byte
+	tableIndex map[string]*schema.Table
 }
 
 func New(cfg config.Config, db *sql.DB, logger io.Writer) (*Server, error) {
@@ -48,6 +53,19 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		return nil, errors.New("server: timeout must be positive")
 	}
 
+	if cfg.DefaultLimit <= 0 {
+		return nil, errors.New("server: default_limit must be positive")
+	}
+
+	if cfg.MaxLimit <= 0 {
+		return nil, errors.New("server: max_limit must be positive")
+	}
+
+	dlc, err := cfg.Driver.Dialect()
+	if err != nil {
+		return nil, err //nolint:wrapcheck // Driver.Dialect returns a descriptive error already.
+	}
+
 	if logger == nil {
 		logger = io.Discard
 	}
@@ -56,8 +74,11 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		addr:           cfg.Listen,
 		db:             db,
 		introspector:   intro,
+		dialect:        dlc,
 		allowedSchemas: cfg.AllowedSchemas,
 		allowedTables:  cfg.AllowedTables,
+		defaultLimit:   cfg.DefaultLimit,
+		maxLimit:       cfg.MaxLimit,
 		timeout:        cfg.Timeout,
 		logger:         logger,
 	}, nil
@@ -150,6 +171,7 @@ func (s *Server) prepare(ctx context.Context) error {
 	}
 
 	s.schema = filterAllowedTables(sch, s.allowedTables)
+	s.tableIndex = indexTables(s.schema.Tables)
 
 	body, err := json.MarshalIndent(s.schema, "", "  ")
 	if err != nil {
@@ -159,6 +181,16 @@ func (s *Server) prepare(ctx context.Context) error {
 	s.schemaJSON = body
 
 	return nil
+}
+
+func indexTables(tables []schema.Table) map[string]*schema.Table {
+	idx := make(map[string]*schema.Table, len(tables))
+	for i := range tables {
+		t := &tables[i]
+		idx[t.Name] = t
+	}
+
+	return idx
 }
 
 func filterAllowedTables(sch schema.Schema, allowed []string) schema.Schema {

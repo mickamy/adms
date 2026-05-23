@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mickamy/adms/internal/config"
+	"github.com/mickamy/adms/internal/database"
 	"github.com/mickamy/adms/internal/schema"
 	"github.com/mickamy/adms/internal/server"
 )
@@ -25,7 +26,12 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 	var logs syncBuffer
 
 	srv, err := server.NewWithIntrospector(
-		config.Config{Timeout: time.Second},
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
 		nil,
 		stubIntrospector{schema: sch},
 		&logs,
@@ -236,7 +242,12 @@ func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
 	srv, err := server.NewWithIntrospector(
-		config.Config{Timeout: time.Second},
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
 		nil,
 		stubIntrospector{},
 		nil, // Logger left nil
@@ -328,7 +339,11 @@ func TestNewRejectsUnknownDriver(t *testing.T) {
 	t.Parallel()
 
 	_, err := server.New(
-		config.Config{Timeout: time.Second}, // Driver left empty/unknown
+		config.Config{
+			Timeout:      time.Second, // Driver left empty/unknown
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
 		nil,
 		nil,
 	)
@@ -366,8 +381,11 @@ func TestServerRunReturnsListenFailure(t *testing.T) {
 
 	srv, err := server.NewWithIntrospector(
 		config.Config{
-			Listen:  "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
-			Timeout: time.Second,
+			Driver:       database.DriverPostgres,
+			Listen:       "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
 		},
 		nil,
 		stubIntrospector{},
@@ -397,7 +415,12 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 	var logs syncBuffer
 
 	srv, err := server.NewWithIntrospector(
-		config.Config{Timeout: time.Second},
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
 		nil,
 		stubIntrospector{},
 		&logs,

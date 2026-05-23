@@ -32,3 +32,15 @@ var (
 	Recoverer = recoverer
 	Logging   = logging
 )
+
+const ProblemTypePrefix = problemTypePrefix
+
+func WriteProblem(
+	w http.ResponseWriter,
+	r *http.Request,
+	logger io.Writer,
+	status int,
+	typeSuffix, title, detail string,
+) {
+	writeProblem(w, r, logger, status, typeSuffix, title, detail)
+}
