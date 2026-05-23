@@ -288,6 +288,36 @@ func TestSelect_TableWithoutSchema(t *testing.T) {
 	}
 }
 
+func TestSelect_RejectsInvalidLimits(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+	table := usersTable()
+
+	tests := []struct {
+		name         string
+		defaultLimit int
+		maxLimit     int
+	}{
+		{"defaultLimit zero", 0, 1000},
+		{"defaultLimit negative", -1, 1000},
+		{"maxLimit zero", 100, 0},
+		{"maxLimit negative", 100, -1},
+		{"defaultLimit exceeds maxLimit", 200, 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := build.Select(query.Query{}, table, d, tt.defaultLimit, tt.maxLimit)
+			if err == nil {
+				t.Errorf("Select: expected error, got nil")
+			}
+		})
+	}
+}
+
 func TestSelect_Errors(t *testing.T) {
 	t.Parallel()
 

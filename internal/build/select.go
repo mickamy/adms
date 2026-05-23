@@ -17,7 +17,23 @@ import (
 // Limit handling: q.Limit is clamped to [1, maxLimit]; nil falls back to
 // defaultLimit. Offset defaults to 0. Both are emitted as literal integers
 // since the parser validates them as non-negative ints.
+//
+// defaultLimit and maxLimit must both be positive, and defaultLimit must
+// not exceed maxLimit; otherwise Select returns an error without inspecting
+// the rest of the query.
 func Select(q query.Query, t *schema.Table, d dialect.Dialect, defaultLimit, maxLimit int) (string, []any, error) {
+	if defaultLimit <= 0 {
+		return "", nil, fmt.Errorf("defaultLimit must be positive, got %d", defaultLimit)
+	}
+
+	if maxLimit <= 0 {
+		return "", nil, fmt.Errorf("maxLimit must be positive, got %d", maxLimit)
+	}
+
+	if defaultLimit > maxLimit {
+		return "", nil, fmt.Errorf("defaultLimit %d must not exceed maxLimit %d", defaultLimit, maxLimit)
+	}
+
 	cols, err := buildSelectClause(q.Select, t, d)
 	if err != nil {
 		return "", nil, err
@@ -42,7 +58,7 @@ func Select(q query.Query, t *schema.Table, d dialect.Dialect, defaultLimit, max
 		limit = *q.Limit
 	}
 
-	if maxLimit > 0 && limit > maxLimit {
+	if limit > maxLimit {
 		limit = maxLimit
 	}
 
