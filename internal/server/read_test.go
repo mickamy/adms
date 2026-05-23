@@ -109,6 +109,23 @@ func TestRead_UnknownColumnReturnsProblem(t *testing.T) {
 	}
 }
 
+func TestNormalizeScanValue_NonUTF8IsDefensivelyCopied(t *testing.T) {
+	t.Parallel()
+
+	src := []byte{0xff, 0xfe, 0xfd}
+
+	got, ok := server.NormalizeScanValue(src).([]byte)
+	if !ok {
+		t.Fatalf("NormalizeScanValue returned %T, want []byte", got)
+	}
+
+	src[0] = 0x00 // mutate the source; the returned slice must be unaffected
+
+	if got[0] != 0xff {
+		t.Errorf("returned slice shares memory with input (got[0]=%#x after src[0]=0x00)", got[0])
+	}
+}
+
 func TestNormalizeScanValue(t *testing.T) {
 	t.Parallel()
 

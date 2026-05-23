@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -122,13 +123,18 @@ func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
 // payloads (binary / blob columns) are passed through as []byte so JSON
 // encoding produces a safe base64 representation rather than corrupting the
 // bytes by force-casting to string.
+//
+// database/sql guarantees the scanned []byte is only valid until the next
+// Scan call, so non-UTF-8 payloads are defensively copied. The UTF-8 branch
+// is safe without an explicit copy because Go's string conversion already
+// allocates a fresh backing array.
 func normalizeScanValue(v any) any {
 	if b, ok := v.([]byte); ok {
 		if utf8.Valid(b) {
 			return string(b)
 		}
 
-		return b
+		return bytes.Clone(b)
 	}
 
 	return v
