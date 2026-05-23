@@ -140,7 +140,7 @@ func TestSelect_EmbedPostgres(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			sql, args, err := build.Select(tt.q, tt.parent, lookup, d, 100, 1000)
+			sql, args, _, err := build.Select(tt.q, tt.parent, lookup, d, 100, 1000)
 			if err != nil {
 				t.Fatalf("Select: %v", err)
 			}
@@ -192,7 +192,7 @@ func TestSelect_EmbedEscapesSingleQuoteInColumnName(t *testing.T) {
 		}},
 	}
 
-	sql, _, err := build.Select(q, users, lookup, dialect.Postgres(), 100, 1000)
+	sql, _, _, err := build.Select(q, users, lookup, dialect.Postgres(), 100, 1000)
 	if err != nil {
 		t.Fatalf("Select: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestSelect_EmbedMySQL(t *testing.T) {
 		"FROM `public`.`posts` WHERE `posts`.`user_id` = `users`.`id`) AS `posts` " +
 		"FROM `public`.`users` LIMIT 100 OFFSET 0"
 
-	sql, _, err := build.Select(q, users, lookup, d, 100, 1000)
+	sql, _, _, err := build.Select(q, users, lookup, d, 100, 1000)
 	if err != nil {
 		t.Fatalf("Select: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestSelect_EmbedErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, _, err := build.Select(tt.q, tt.parent, tt.lookup, d, 100, 1000)
+			_, _, _, err := build.Select(tt.q, tt.parent, tt.lookup, d, 100, 1000)
 			if err == nil {
 				t.Errorf("Select: expected error, got nil")
 			}

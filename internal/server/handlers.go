@@ -44,7 +44,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, args, err := build.Select(q, table, s.tableIndex, s.dialect, s.defaultLimit, s.maxLimit)
+	stmt, args, embedAliases, err := build.Select(q, table, s.tableIndex, s.dialect, s.defaultLimit, s.maxLimit)
 	if err != nil {
 		writeProblem(w, r, s.logger, http.StatusBadRequest,
 			"invalid-query", "Invalid query", err.Error())
@@ -67,7 +67,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	result, err := rowsToJSON(rows)
+	result, err := rowsToJSON(rows, embedAliases)
 	if err != nil {
 		fmt.Fprintf(s.logger, "adms: encode rows %s %s: %v\n", r.Method, r.URL.EscapedPath(), err)
 		writeProblem(w, r, s.logger, http.StatusInternalServerError,
@@ -83,10 +83,15 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
+func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("columns: %w", err)
+	}
+
+	embedSet := make(map[string]struct{}, len(embedAliases))
+	for _, a := range embedAliases {
+		embedSet[a] = struct{}{}
 	}
 
 	// Allocate scan buffers once. rows.Scan overwrites values[i] each iteration
@@ -108,6 +113,15 @@ func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
 
 		row := make(map[string]any, len(cols))
 		for i, col := range cols {
+			if _, isEmbed := embedSet[col]; isEmbed {
+				decoded, err := decodeEmbedValue(values[i])
+				if err != nil {
+					return nil, fmt.Errorf("decode embed %q: %w", col, err)
+				}
+				row[col] = decoded
+				continue
+			}
+
 			row[col] = normalizeScanValue(values[i])
 		}
 
@@ -119,6 +133,39 @@ func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
 	}
 
 	return result, nil
+}
+
+// decodeEmbedValue turns the driver-returned bytes/string of an embed
+// subquery back into a Go map or slice so the surrounding JSON encoder emits
+// a nested object/array rather than a quoted JSON string. SQL NULL (no
+// related rows on a many-to-one embed) and empty payloads are preserved as
+// Go nil — both legitimate JSON values, hence the deliberate (nil, nil)
+// return.
+func decodeEmbedValue(v any) (any, error) {
+	if v == nil {
+		return nil, nil //nolint:nilnil // SQL NULL → JSON null
+	}
+
+	var raw []byte
+	switch x := v.(type) {
+	case []byte:
+		raw = x
+	case string:
+		raw = []byte(x)
+	default:
+		return v, nil
+	}
+
+	if len(raw) == 0 {
+		return nil, nil //nolint:nilnil // empty embed payload → JSON null
+	}
+
+	var parsed any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("unmarshal: %w", err)
+	}
+
+	return parsed, nil
 }
 
 // normalizeScanValue makes driver-returned values JSON-friendly. The MySQL

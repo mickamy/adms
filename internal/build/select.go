@@ -28,24 +28,24 @@ func Select(
 	lookup SchemaLookup,
 	d dialect.Dialect,
 	defaultLimit, maxLimit int,
-) (string, []any, error) {
+) (string, []any, []string, error) {
 	if defaultLimit <= 0 {
-		return "", nil, fmt.Errorf("defaultLimit must be positive, got %d", defaultLimit)
+		return "", nil, nil, fmt.Errorf("defaultLimit must be positive, got %d", defaultLimit)
 	}
 
 	if maxLimit <= 0 {
-		return "", nil, fmt.Errorf("maxLimit must be positive, got %d", maxLimit)
+		return "", nil, nil, fmt.Errorf("maxLimit must be positive, got %d", maxLimit)
 	}
 
 	if defaultLimit > maxLimit {
-		return "", nil, fmt.Errorf("defaultLimit %d must not exceed maxLimit %d", defaultLimit, maxLimit)
+		return "", nil, nil, fmt.Errorf("defaultLimit %d must not exceed maxLimit %d", defaultLimit, maxLimit)
 	}
 
 	columns := columnSet(t)
 
-	cols, err := buildSelectClause(q.Select, t, lookup, d, columns)
+	cols, embedAliases, err := buildSelectClause(q.Select, t, lookup, d, columns)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	var args []any
@@ -53,13 +53,13 @@ func Select(
 	if q.Filter != nil {
 		where, err = buildWhere(q.Filter, t, d, columns, &args)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 	}
 
 	orderBy, err := buildOrderBy(q.Order, t, d, columns)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	limit := defaultLimit
@@ -95,7 +95,7 @@ func Select(
 
 	fmt.Fprintf(&b, " LIMIT %d OFFSET %d", limit, offset)
 
-	return b.String(), args, nil
+	return b.String(), args, embedAliases, nil
 }
 
 func qualifiedTable(t *schema.Table, d dialect.Dialect) string {
@@ -112,9 +112,9 @@ func buildSelectClause(
 	lookup SchemaLookup,
 	d dialect.Dialect,
 	columns map[string]struct{},
-) (string, error) {
+) (string, []string, error) {
 	if len(items) == 0 {
-		return "*", nil
+		return "*", nil, nil
 	}
 
 	// First pass: validate "*" usage and decide whether to seed `seen` with
@@ -128,7 +128,7 @@ func buildSelectClause(
 
 		if it.Column == "*" {
 			if hasStar {
-				return "", errors.New("select '*' specified more than once")
+				return "", nil, errors.New("select '*' specified more than once")
 			}
 
 			hasStar = true
@@ -139,7 +139,7 @@ func buildSelectClause(
 	}
 
 	if hasStar && hasNamedCol {
-		return "", errors.New("select cannot mix '*' with named columns")
+		return "", nil, errors.New("select cannot mix '*' with named columns")
 	}
 
 	seen := make(map[string]struct{}, len(items))
@@ -152,11 +152,12 @@ func buildSelectClause(
 
 	// Second pass: emit SQL fragments and detect duplicates.
 	parts := make([]string, 0, len(items))
+	var embedAliases []string
 
 	for _, it := range items {
 		if it.Embed != nil {
 			if lookup == nil {
-				return "", fmt.Errorf("embedded relation %q requires a schema lookup", it.Embed.Relation)
+				return "", nil, fmt.Errorf("embedded relation %q requires a schema lookup", it.Embed.Relation)
 			}
 
 			alias := it.Alias
@@ -165,17 +166,18 @@ func buildSelectClause(
 			}
 
 			if _, dup := seen[alias]; dup {
-				return "", fmt.Errorf("duplicate select alias %q", alias)
+				return "", nil, fmt.Errorf("duplicate select alias %q", alias)
 			}
 
 			seen[alias] = struct{}{}
 
 			sub, err := buildEmbedSubquery(it, t, lookup, d)
 			if err != nil {
-				return "", err
+				return "", nil, err
 			}
 
 			parts = append(parts, sub)
+			embedAliases = append(embedAliases, alias)
 			continue
 		}
 
@@ -185,11 +187,11 @@ func buildSelectClause(
 		}
 
 		if _, ok := columns[it.Column]; !ok {
-			return "", fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
+			return "", nil, fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
 		}
 
 		if _, dup := seen[it.Column]; dup {
-			return "", fmt.Errorf("duplicate select column %q", it.Column)
+			return "", nil, fmt.Errorf("duplicate select column %q", it.Column)
 		}
 
 		seen[it.Column] = struct{}{}
@@ -197,7 +199,7 @@ func buildSelectClause(
 		parts = append(parts, d.Quote(it.Column))
 	}
 
-	return strings.Join(parts, ", "), nil
+	return strings.Join(parts, ", "), embedAliases, nil
 }
 
 func buildWhere(
