@@ -486,3 +486,40 @@ func httpProbe(ctx context.Context, url string) (*http.Response, error) {
 
 	return http.DefaultClient.Do(req) //nolint:wrapcheck // same as above
 }
+
+func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{Schema: "public", Name: "users", Columns: []schema.Column{{Name: "id"}}},
+			{Schema: "internal", Name: "users", Columns: []schema.Column{{Name: "id"}}},
+		},
+	}
+
+	var logs syncBuffer
+
+	srv, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		nil,
+		stubIntrospector{schema: sch},
+		&logs,
+	)
+	if err != nil {
+		t.Fatalf("NewWithIntrospector: %v", err)
+	}
+
+	err = srv.Prepare(t.Context())
+	if err == nil {
+		t.Fatal("Prepare error = nil, want non-nil for duplicate table names")
+	}
+
+	if !strings.Contains(err.Error(), "duplicate table") {
+		t.Errorf("Prepare error = %q, want substring %q", err.Error(), "duplicate table")
+	}
+}

@@ -171,7 +171,13 @@ func (s *Server) prepare(ctx context.Context) error {
 	}
 
 	s.schema = filterAllowedTables(sch, s.allowedTables)
-	s.tableIndex = indexTables(s.schema.Tables)
+
+	idx, err := indexTables(s.schema.Tables)
+	if err != nil {
+		return fmt.Errorf("index tables: %w", err)
+	}
+
+	s.tableIndex = idx
 
 	body, err := json.MarshalIndent(s.schema, "", "  ")
 	if err != nil {
@@ -183,14 +189,25 @@ func (s *Server) prepare(ctx context.Context) error {
 	return nil
 }
 
-func indexTables(tables []schema.Table) map[string]*schema.Table {
+// indexTables builds a name → *Table map for O(1) route lookup. Duplicate
+// table names across schemas yield an error rather than a silent overwrite,
+// so the caller can either narrow allowed_schemas/allowed_tables or extend
+// the routing scheme to disambiguate.
+func indexTables(tables []schema.Table) (map[string]*schema.Table, error) {
 	idx := make(map[string]*schema.Table, len(tables))
+
 	for i := range tables {
 		t := &tables[i]
+		if existing, ok := idx[t.Name]; ok {
+			return nil, fmt.Errorf(
+				"duplicate table name %q in schemas %q and %q",
+				t.Name, existing.Schema, t.Schema)
+		}
+
 		idx[t.Name] = t
 	}
 
-	return idx
+	return idx, nil
 }
 
 func filterAllowedTables(sch schema.Schema, allowed []string) schema.Schema {
