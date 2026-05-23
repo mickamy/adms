@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mickamy/adms/internal/config"
+	"github.com/mickamy/adms/internal/dialect"
 	"github.com/mickamy/adms/internal/schema"
 )
 
@@ -21,13 +22,17 @@ type Server struct {
 	addr           string
 	db             *sql.DB
 	introspector   schema.Introspector
+	dialect        dialect.Dialect
 	allowedSchemas []string
 	allowedTables  []string
+	defaultLimit   int
+	maxLimit       int
 	timeout        time.Duration
 	logger         io.Writer
 
 	schema     schema.Schema
 	schemaJSON []byte
+	tableIndex map[string]*schema.Table
 }
 
 func New(cfg config.Config, db *sql.DB, logger io.Writer) (*Server, error) {
@@ -44,8 +49,31 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		return nil, errors.New("server: introspector is required")
 	}
 
+	if db == nil {
+		return nil, errors.New("server: db is required")
+	}
+
 	if cfg.Timeout <= 0 {
 		return nil, errors.New("server: timeout must be positive")
+	}
+
+	if cfg.DefaultLimit <= 0 {
+		return nil, errors.New("server: default_limit must be positive")
+	}
+
+	if cfg.MaxLimit <= 0 {
+		return nil, errors.New("server: max_limit must be positive")
+	}
+
+	if cfg.DefaultLimit > cfg.MaxLimit {
+		return nil, fmt.Errorf(
+			"server: default_limit (%d) must not exceed max_limit (%d)",
+			cfg.DefaultLimit, cfg.MaxLimit)
+	}
+
+	dlc, err := cfg.Driver.Dialect()
+	if err != nil {
+		return nil, err //nolint:wrapcheck // Driver.Dialect returns a descriptive error already.
 	}
 
 	if logger == nil {
@@ -56,8 +84,11 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		addr:           cfg.Listen,
 		db:             db,
 		introspector:   intro,
+		dialect:        dlc,
 		allowedSchemas: cfg.AllowedSchemas,
 		allowedTables:  cfg.AllowedTables,
+		defaultLimit:   cfg.DefaultLimit,
+		maxLimit:       cfg.MaxLimit,
 		timeout:        cfg.Timeout,
 		logger:         logger,
 	}, nil
@@ -151,6 +182,13 @@ func (s *Server) prepare(ctx context.Context) error {
 
 	s.schema = filterAllowedTables(sch, s.allowedTables)
 
+	idx, err := indexTables(s.schema.Tables)
+	if err != nil {
+		return fmt.Errorf("index tables: %w", err)
+	}
+
+	s.tableIndex = idx
+
 	body, err := json.MarshalIndent(s.schema, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal schema: %w", err)
@@ -159,6 +197,27 @@ func (s *Server) prepare(ctx context.Context) error {
 	s.schemaJSON = body
 
 	return nil
+}
+
+// indexTables builds a name → *Table map for O(1) route lookup. Duplicate
+// table names across schemas yield an error rather than a silent overwrite,
+// so the caller can either narrow allowed_schemas/allowed_tables or extend
+// the routing scheme to disambiguate.
+func indexTables(tables []schema.Table) (map[string]*schema.Table, error) {
+	idx := make(map[string]*schema.Table, len(tables))
+
+	for i := range tables {
+		t := &tables[i]
+		if existing, ok := idx[t.Name]; ok {
+			return nil, fmt.Errorf(
+				"duplicate table name %q in schemas %q and %q",
+				t.Name, existing.Schema, t.Schema)
+		}
+
+		idx[t.Name] = t
+	}
+
+	return idx, nil
 }
 
 func filterAllowedTables(sch schema.Schema, allowed []string) schema.Schema {

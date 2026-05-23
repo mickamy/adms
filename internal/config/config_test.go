@@ -274,6 +274,65 @@ timeout: -5s`,
 			wantErr: "must be positive",
 		},
 		{
+			name:     "default_limit and max_limit override defaults",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+default_limit: 50
+max_limit: 200`,
+			want: config.Config{
+				Driver:       database.DriverPostgres,
+				DSN:          "x",
+				Listen:       config.DefaultListen,
+				Timeout:      config.DefaultTimeout,
+				LogLevel:     config.DefaultLogLevel,
+				UI:           config.UIConfig{Listen: config.DefaultUIListen},
+				DefaultLimit: 50,
+				MaxLimit:     200,
+			},
+		},
+		{
+			name:     "negative default_limit rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+default_limit: -1`,
+			wantErr: "default_limit",
+		},
+		{
+			name:     "explicit zero default_limit rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+default_limit: 0`,
+			wantErr: "default_limit",
+		},
+		{
+			name:     "negative max_limit rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+max_limit: -1`,
+			wantErr: "max_limit",
+		},
+		{
+			name:     "explicit zero max_limit rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+max_limit: 0`,
+			wantErr: "max_limit",
+		},
+		{
+			name:     "default_limit exceeding max_limit rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+default_limit: 500
+max_limit: 100`,
+			wantErr: "default_limit (500) must not exceed max_limit (100)",
+		},
+		{
 			name:     "whitespace around scalar string fields is normalized",
 			filename: "adms.yaml",
 			body: `driver: "  postgres  "
@@ -603,6 +662,24 @@ func assertConfigEqual(t *testing.T, got, want config.Config) {
 
 	if got.UI != want.UI {
 		t.Errorf("UI = %+v, want %+v", got.UI, want.UI)
+	}
+
+	wantDefaultLimit := want.DefaultLimit
+	if wantDefaultLimit == 0 {
+		wantDefaultLimit = config.DefaultLimit
+	}
+
+	if got.DefaultLimit != wantDefaultLimit {
+		t.Errorf("DefaultLimit = %d, want %d", got.DefaultLimit, wantDefaultLimit)
+	}
+
+	wantMaxLimit := want.MaxLimit
+	if wantMaxLimit == 0 {
+		wantMaxLimit = config.DefaultMaxLimit
+	}
+
+	if got.MaxLimit != wantMaxLimit {
+		t.Errorf("MaxLimit = %d, want %d", got.MaxLimit, wantMaxLimit)
 	}
 }
 

@@ -29,6 +29,20 @@ func NewWithIntrospector(
 }
 
 var (
-	Recoverer = recoverer
-	Logging   = logging
+	Recoverer           = recoverer
+	Logging             = logging
+	NormalizeScanValue  = normalizeScanValue
+	FilterAllowedTables = filterAllowedTables
 )
+
+const ProblemTypePrefix = problemTypePrefix
+
+func WriteProblem(
+	w http.ResponseWriter,
+	r *http.Request,
+	logger io.Writer,
+	status int,
+	typeSuffix, title, detail string,
+) {
+	writeProblem(w, r, logger, status, typeSuffix, title, detail)
+}

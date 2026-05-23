@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mickamy/adms/internal/config"
+	"github.com/mickamy/adms/internal/database"
 	"github.com/mickamy/adms/internal/schema"
 	"github.com/mickamy/adms/internal/server"
 )
@@ -25,8 +26,13 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 	var logs syncBuffer
 
 	srv, err := server.NewWithIntrospector(
-		config.Config{Timeout: time.Second},
-		nil,
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		stubDB,
 		stubIntrospector{schema: sch},
 		&logs,
 	)
@@ -43,6 +49,11 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 
 	return ts, &logs
 }
+
+// stubDB is a non-nil but inert sentinel for tests that do not exercise the
+// DB. Server construction now rejects nil DBs, and these tests reach the
+// handler only on error paths that return before any DB call.
+var stubDB = &sql.DB{}
 
 type stubIntrospector struct {
 	schema schema.Schema
@@ -236,8 +247,13 @@ func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
 	srv, err := server.NewWithIntrospector(
-		config.Config{Timeout: time.Second},
-		nil,
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		stubDB,
 		stubIntrospector{},
 		nil, // Logger left nil
 	)
@@ -328,8 +344,12 @@ func TestNewRejectsUnknownDriver(t *testing.T) {
 	t.Parallel()
 
 	_, err := server.New(
-		config.Config{Timeout: time.Second}, // Driver left empty/unknown
-		nil,
+		config.Config{
+			Timeout:      time.Second, // Driver left empty/unknown
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		stubDB,
 		nil,
 	)
 	if err == nil {
@@ -341,12 +361,58 @@ func TestNewRejectsUnknownDriver(t *testing.T) {
 	}
 }
 
+func TestNewRequiresDB(t *testing.T) {
+	t.Parallel()
+
+	_, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		nil,
+		stubIntrospector{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("NewWithIntrospector error = nil, want error for nil db")
+	}
+
+	if !strings.Contains(err.Error(), "db is required") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "db is required")
+	}
+}
+
+func TestNewRejectsDefaultLimitExceedingMaxLimit(t *testing.T) {
+	t.Parallel()
+
+	_, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 500,
+			MaxLimit:     100,
+		},
+		stubDB,
+		stubIntrospector{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("NewWithIntrospector error = nil, want error for default_limit > max_limit")
+	}
+
+	if !strings.Contains(err.Error(), "default_limit") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "default_limit")
+	}
+}
+
 func TestNewRequiresPositiveTimeout(t *testing.T) {
 	t.Parallel()
 
 	_, err := server.NewWithIntrospector(
 		config.Config{},
-		nil,
+		stubDB,
 		stubIntrospector{},
 		nil,
 	)
@@ -366,10 +432,13 @@ func TestServerRunReturnsListenFailure(t *testing.T) {
 
 	srv, err := server.NewWithIntrospector(
 		config.Config{
-			Listen:  "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
-			Timeout: time.Second,
+			Driver:       database.DriverPostgres,
+			Listen:       "127.0.0.1:99999", // out-of-range port; net.Listen rejects it
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
 		},
-		nil,
+		stubDB,
 		stubIntrospector{},
 		&logs,
 	)
@@ -397,8 +466,13 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 	var logs syncBuffer
 
 	srv, err := server.NewWithIntrospector(
-		config.Config{Timeout: time.Second},
-		nil,
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		stubDB,
 		stubIntrospector{},
 		&logs,
 	)
@@ -462,4 +536,97 @@ func httpProbe(ctx context.Context, url string) (*http.Response, error) {
 	}
 
 	return http.DefaultClient.Do(req) //nolint:wrapcheck // same as above
+}
+
+func TestFilterAllowedTables(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{Schema: "public", Name: "users"},
+			{Schema: "public", Name: "posts"},
+			{Schema: "internal", Name: "audit_log"},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		allowed   []string
+		wantNames []string
+	}{
+		{"nil allow list keeps every table", nil, []string{"users", "posts", "audit_log"}},
+		{"empty allow list keeps every table", []string{}, []string{"users", "posts", "audit_log"}},
+		{"subset keeps only listed tables", []string{"users", "posts"}, []string{"users", "posts"}},
+		{"single match keeps just one", []string{"users"}, []string{"users"}},
+		{"no match yields empty schema", []string{"ghost"}, []string{}},
+		{"all match keeps every table", []string{"users", "posts", "audit_log"}, []string{"users", "posts", "audit_log"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := server.FilterAllowedTables(sch, tt.allowed)
+
+			gotNames := make([]string, 0, len(got.Tables))
+			for _, table := range got.Tables {
+				gotNames = append(gotNames, table.Name)
+			}
+
+			if !equalStringSlices(gotNames, tt.wantNames) {
+				t.Errorf("names = %v, want %v", gotNames, tt.wantNames)
+			}
+		})
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{Schema: "public", Name: "users", Columns: []schema.Column{{Name: "id"}}},
+			{Schema: "internal", Name: "users", Columns: []schema.Column{{Name: "id"}}},
+		},
+	}
+
+	var logs syncBuffer
+
+	srv, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		stubDB,
+		stubIntrospector{schema: sch},
+		&logs,
+	)
+	if err != nil {
+		t.Fatalf("NewWithIntrospector: %v", err)
+	}
+
+	err = srv.Prepare(t.Context())
+	if err == nil {
+		t.Fatal("Prepare error = nil, want non-nil for duplicate table names")
+	}
+
+	if !strings.Contains(err.Error(), "duplicate table") {
+		t.Errorf("Prepare error = %q, want substring %q", err.Error(), "duplicate table")
+	}
 }

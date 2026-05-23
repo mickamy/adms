@@ -14,6 +14,8 @@ const (
 	DefaultUIListen = ":7778"
 	DefaultTimeout  = 30 * time.Second
 	DefaultLogLevel = "info"
+	DefaultLimit    = 100
+	DefaultMaxLimit = 1000
 )
 
 type Config struct {
@@ -28,6 +30,8 @@ type Config struct {
 	CORSOrigins    []string
 	AuthTokenEnv   string
 	LogLevel       string
+	DefaultLimit   int
+	MaxLimit       int
 }
 
 type UIConfig struct {
@@ -92,6 +96,28 @@ func buildConfig(c config) (Config, error) {
 		logLevel = DefaultLogLevel
 	}
 
+	defaultLimit := DefaultLimit
+	if c.DefaultLimit != nil {
+		defaultLimit = *c.DefaultLimit
+	}
+
+	maxLimit := DefaultMaxLimit
+	if c.MaxLimit != nil {
+		maxLimit = *c.MaxLimit
+	}
+
+	if defaultLimit <= 0 {
+		return Config{}, fmt.Errorf("invalid default_limit %d: must be positive", defaultLimit)
+	}
+
+	if maxLimit <= 0 {
+		return Config{}, fmt.Errorf("invalid max_limit %d: must be positive", maxLimit)
+	}
+
+	if defaultLimit > maxLimit {
+		return Config{}, fmt.Errorf("default_limit (%d) must not exceed max_limit (%d)", defaultLimit, maxLimit)
+	}
+
 	return Config{
 		Driver:         drv,
 		DSN:            c.DSN,
@@ -107,6 +133,8 @@ func buildConfig(c config) (Config, error) {
 		CORSOrigins:  c.CORSOrigins,
 		AuthTokenEnv: c.AuthTokenEnv,
 		LogLevel:     logLevel,
+		DefaultLimit: defaultLimit,
+		MaxLimit:     maxLimit,
 	}, nil
 }
 

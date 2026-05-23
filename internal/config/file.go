@@ -25,6 +25,8 @@ type config struct {
 	CORSOrigins    []string `toml:"cors_origins"    yaml:"cors_origins"`
 	AuthTokenEnv   string   `toml:"auth_token_env"  yaml:"auth_token_env"`
 	LogLevel       string   `toml:"log_level"       yaml:"log_level"`
+	DefaultLimit   *int     `toml:"default_limit"   yaml:"default_limit"`
+	MaxLimit       *int     `toml:"max_limit"       yaml:"max_limit"`
 }
 
 type uiConfig struct {
