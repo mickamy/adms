@@ -100,6 +100,25 @@ func TestSelect_OK(t *testing.T) {
 				},
 			}},
 		},
+		{
+			name: "nested aliased embed keeps inner alias",
+			in:   "posts(author:users(id,name))",
+			want: []query.SelectItem{{
+				Embed: &query.Embed{
+					Relation: "posts",
+					Items: []query.SelectItem{{
+						Alias: "author",
+						Embed: &query.Embed{
+							Relation: "users",
+							Items: []query.SelectItem{
+								{Column: "id"},
+								{Column: "name"},
+							},
+						},
+					}},
+				},
+			}},
+		},
 	}
 
 	for _, tt := range tests {

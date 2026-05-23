@@ -49,7 +49,7 @@ func parseSelectItem(s string) (SelectItem, error) {
 	}
 
 	var alias string
-	if i := strings.Index(s, ":"); i >= 0 {
+	if i := topLevelColonIndex(s); i >= 0 {
 		rest := strings.TrimSpace(s[i+1:])
 		if !strings.Contains(rest, "(") {
 			return SelectItem{}, fmt.Errorf(
@@ -101,4 +101,22 @@ func parseSelectItem(s string) (SelectItem, error) {
 	}
 
 	return SelectItem{Column: s}, nil
+}
+
+// topLevelColonIndex returns the index of the first ':' that occurs before
+// any '('. Colons inside an embedded item — e.g. the ':' in
+// `posts(author:users(id))` — must not be treated as an outer alias
+// separator.
+func topLevelColonIndex(s string) int {
+	for i, r := range s {
+		if r == '(' {
+			return -1
+		}
+
+		if r == ':' {
+			return i
+		}
+	}
+
+	return -1
 }
