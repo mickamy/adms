@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"unicode/utf8"
 
 	"github.com/mickamy/adms/internal/build"
 	"github.com/mickamy/adms/internal/query"
@@ -53,8 +54,9 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	// introspected schema; values are passed as placeholder args, not interpolated.
 	rows, err := s.db.QueryContext(r.Context(), stmt, args...) //nolint:gosec // see comment above
 	if err != nil {
+		fmt.Fprintf(s.logger, "adms: query %s %s: %v\n", r.Method, r.URL.EscapedPath(), err)
 		writeProblem(w, r, s.logger, http.StatusInternalServerError,
-			"db-error", "Database error", err.Error())
+			"db-error", "Database error", "the database refused or failed to execute the query")
 
 		return
 	}
@@ -62,8 +64,9 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 
 	result, err := rowsToJSON(rows)
 	if err != nil {
+		fmt.Fprintf(s.logger, "adms: encode rows %s %s: %v\n", r.Method, r.URL.EscapedPath(), err)
 		writeProblem(w, r, s.logger, http.StatusInternalServerError,
-			"db-error", "Database error", err.Error())
+			"db-error", "Database error", "failed to read rows from the database")
 
 		return
 	}
@@ -111,11 +114,18 @@ func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
 }
 
 // normalizeScanValue makes driver-returned values JSON-friendly. The MySQL
-// driver returns text-typed columns as []byte; encoding/json would emit those
-// as base64 strings, so we convert them back to string.
+// driver returns text-typed columns as []byte; we convert valid UTF-8 byte
+// slices to string so encoding/json emits a normal JSON string. Non-UTF-8
+// payloads (binary / blob columns) are passed through as []byte so JSON
+// encoding produces a safe base64 representation rather than corrupting the
+// bytes by force-casting to string.
 func normalizeScanValue(v any) any {
 	if b, ok := v.([]byte); ok {
-		return string(b)
+		if utf8.Valid(b) {
+			return string(b)
+		}
+
+		return b
 	}
 
 	return v

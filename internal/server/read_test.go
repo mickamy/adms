@@ -3,6 +3,7 @@ package server_test
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -105,5 +106,33 @@ func TestRead_UnknownColumnReturnsProblem(t *testing.T) {
 
 	if !strings.Contains(p.Detail, "ghost") {
 		t.Errorf("Problem.Detail = %q, want it to mention column name", p.Detail)
+	}
+}
+
+func TestNormalizeScanValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   any
+		want any
+	}{
+		{"nil passes through", nil, nil},
+		{"int64 passes through", int64(42), int64(42)},
+		{"string passes through", "hello", "hello"},
+		{"valid UTF-8 bytes become string", []byte("hello"), "hello"},
+		{"invalid UTF-8 bytes preserved as []byte", []byte{0xff, 0xfe, 0xfd}, []byte{0xff, 0xfe, 0xfd}},
+		{"empty bytes become empty string", []byte{}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := server.NormalizeScanValue(tt.in)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }
