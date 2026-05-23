@@ -30,3 +30,11 @@ func (mysqlDialect) SupportsReturning() bool { return false }
 func (mysqlDialect) JSONAgg(expr, _ string) string {
 	return fmt.Sprintf("JSON_ARRAYAGG(%s)", expr)
 }
+
+func (mysqlDialect) JSONObject(pairs []string) string {
+	return fmt.Sprintf("JSON_OBJECT(%s)", strings.Join(pairs, ", "))
+}
+
+func (mysqlDialect) EmptyJSONArray() string {
+	return "JSON_ARRAY()"
+}

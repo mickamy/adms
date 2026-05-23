@@ -88,3 +88,27 @@ func TestPostgresJSONAgg(t *testing.T) {
 		t.Errorf("JSONAgg(x, y ASC) = %q, want %q", got, want)
 	}
 }
+
+func TestPostgresJSONObject(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+
+	if got, want := d.JSONObject(nil), "json_build_object()"; got != want {
+		t.Errorf("JSONObject(nil) = %q, want %q", got, want)
+	}
+
+	got := d.JSONObject([]string{"'id'", `"u"."id"`, "'name'", `"u"."name"`})
+	want := `json_build_object('id', "u"."id", 'name', "u"."name")`
+	if got != want {
+		t.Errorf("JSONObject(...) = %q, want %q", got, want)
+	}
+}
+
+func TestPostgresEmptyJSONArray(t *testing.T) {
+	t.Parallel()
+
+	if got, want := dialect.Postgres().EmptyJSONArray(), "'[]'::json"; got != want {
+		t.Errorf("EmptyJSONArray() = %q, want %q", got, want)
+	}
+}

@@ -30,3 +30,11 @@ func (postgresDialect) JSONAgg(expr, orderBy string) string {
 
 	return fmt.Sprintf("json_agg(%s ORDER BY %s)", expr, orderBy)
 }
+
+func (postgresDialect) JSONObject(pairs []string) string {
+	return fmt.Sprintf("json_build_object(%s)", strings.Join(pairs, ", "))
+}
+
+func (postgresDialect) EmptyJSONArray() string {
+	return "'[]'::json"
+}

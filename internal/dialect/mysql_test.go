@@ -75,3 +75,27 @@ func TestMySQLJSONAgg(t *testing.T) {
 		t.Errorf("JSONAgg(x, y ASC) = %q, want %q", got, want)
 	}
 }
+
+func TestMySQLJSONObject(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.MySQL()
+
+	if got, want := d.JSONObject(nil), "JSON_OBJECT()"; got != want {
+		t.Errorf("JSONObject(nil) = %q, want %q", got, want)
+	}
+
+	got := d.JSONObject([]string{"'id'", "`u`.`id`", "'name'", "`u`.`name`"})
+	want := "JSON_OBJECT('id', `u`.`id`, 'name', `u`.`name`)"
+	if got != want {
+		t.Errorf("JSONObject(...) = %q, want %q", got, want)
+	}
+}
+
+func TestMySQLEmptyJSONArray(t *testing.T) {
+	t.Parallel()
+
+	if got, want := dialect.MySQL().EmptyJSONArray(), "JSON_ARRAY()"; got != want {
+		t.Errorf("EmptyJSONArray() = %q, want %q", got, want)
+	}
+}
