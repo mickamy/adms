@@ -169,9 +169,9 @@ func parseOrder(s string) ([]OrderItem, error) {
 		if i := strings.LastIndex(p, "."); i >= 0 {
 			switch p[i+1:] {
 			case "asc":
-				col = p[:i]
+				col = strings.TrimSpace(p[:i])
 			case "desc":
-				col = p[:i]
+				col = strings.TrimSpace(p[:i])
 				desc = true
 			default:
 				return nil, fmt.Errorf("invalid order direction in %q: want asc or desc", p)
@@ -195,7 +195,8 @@ func parseOrder(s string) ([]OrderItem, error) {
 // parsePredicate parses a single "column = value" pair where value is
 // "op.literal", "not.op.literal", "in.(v1,v2,...)", or "is.null|true|false".
 func parsePredicate(column, value string) (Predicate, error) {
-	if strings.TrimSpace(column) == "" {
+	column = strings.TrimSpace(column)
+	if column == "" {
 		return Predicate{}, errors.New("invalid filter: empty column name")
 	}
 

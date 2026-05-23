@@ -135,6 +135,26 @@ func TestParse_OK(t *testing.T) {
 			},
 		},
 		{
+			name: "order trims whitespace around column",
+			in:   url.Values{"order": {"name .desc"}},
+			want: query.Query{
+				Order: []query.OrderItem{{Column: "name", Desc: true}},
+			},
+		},
+		{
+			name: "group element trims whitespace around column",
+			in:   url.Values{"or": {"(a .eq.1,b.eq.2)"}},
+			want: query.Query{
+				Filter: query.FilterGroup{
+					Op: query.LogicalOr,
+					Nodes: []query.FilterNode{
+						query.Predicate{Column: "a", Op: query.OpEq, Value: "1"},
+						query.Predicate{Column: "b", Op: query.OpEq, Value: "2"},
+					},
+				},
+			},
+		},
+		{
 			name: "limit and offset",
 			in:   url.Values{"limit": {"20"}, "offset": {"40"}},
 			want: query.Query{
@@ -207,6 +227,8 @@ func TestParse_Error(t *testing.T) {
 		{"duplicate offset", url.Values{"offset": {"0", "10"}}},
 		{"empty column", url.Values{"": {"eq.1"}}},
 		{"group element with empty column", url.Values{"or": {"(.eq.1,b.eq.2)"}}},
+		{"group element with whitespace-only column", url.Values{"or": {"( .eq.1,b.eq.2)"}}},
+		{"order whitespace-only column", url.Values{"order": {"  .desc"}}},
 	}
 
 	for _, tt := range tests {
