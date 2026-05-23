@@ -34,7 +34,9 @@ func Select(q query.Query, t *schema.Table, d dialect.Dialect, defaultLimit, max
 		return "", nil, fmt.Errorf("defaultLimit %d must not exceed maxLimit %d", defaultLimit, maxLimit)
 	}
 
-	cols, err := buildSelectClause(q.Select, t, d)
+	columns := columnSet(t)
+
+	cols, err := buildSelectClause(q.Select, t, d, columns)
 	if err != nil {
 		return "", nil, err
 	}
@@ -42,13 +44,13 @@ func Select(q query.Query, t *schema.Table, d dialect.Dialect, defaultLimit, max
 	var args []any
 	var where string
 	if q.Filter != nil {
-		where, err = buildWhere(q.Filter, t, d, &args)
+		where, err = buildWhere(q.Filter, t, d, columns, &args)
 		if err != nil {
 			return "", nil, err
 		}
 	}
 
-	orderBy, err := buildOrderBy(q.Order, t, d)
+	orderBy, err := buildOrderBy(q.Order, t, d, columns)
 	if err != nil {
 		return "", nil, err
 	}
@@ -97,7 +99,12 @@ func qualifiedTable(t *schema.Table, d dialect.Dialect) string {
 	return d.Quote(t.Schema) + "." + d.Quote(t.Name)
 }
 
-func buildSelectClause(items []query.SelectItem, t *schema.Table, d dialect.Dialect) (string, error) {
+func buildSelectClause(
+	items []query.SelectItem,
+	t *schema.Table,
+	d dialect.Dialect,
+	columns map[string]struct{},
+) (string, error) {
 	if len(items) == 0 {
 		return "*", nil
 	}
@@ -109,7 +116,7 @@ func buildSelectClause(items []query.SelectItem, t *schema.Table, d dialect.Dial
 			continue
 		}
 
-		if !columnExists(t, it.Column) {
+		if _, ok := columns[it.Column]; !ok {
 			return "", fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
 		}
 
@@ -119,14 +126,20 @@ func buildSelectClause(items []query.SelectItem, t *schema.Table, d dialect.Dial
 	return strings.Join(parts, ", "), nil
 }
 
-func buildWhere(node query.FilterNode, t *schema.Table, d dialect.Dialect, args *[]any) (string, error) {
+func buildWhere(
+	node query.FilterNode,
+	t *schema.Table,
+	d dialect.Dialect,
+	columns map[string]struct{},
+	args *[]any,
+) (string, error) {
 	switch n := node.(type) {
 	case query.Predicate:
-		return buildPredicate(n, t, d, args)
+		return buildPredicate(n, t, d, columns, args)
 	case query.FilterGroup:
 		parts := make([]string, 0, len(n.Nodes))
 		for _, child := range n.Nodes {
-			s, err := buildWhere(child, t, d, args)
+			s, err := buildWhere(child, t, d, columns, args)
 			if err != nil {
 				return "", err
 			}
@@ -144,8 +157,14 @@ func buildWhere(node query.FilterNode, t *schema.Table, d dialect.Dialect, args 
 	}
 }
 
-func buildPredicate(p query.Predicate, t *schema.Table, d dialect.Dialect, args *[]any) (string, error) {
-	if !columnExists(t, p.Column) {
+func buildPredicate(
+	p query.Predicate,
+	t *schema.Table,
+	d dialect.Dialect,
+	columns map[string]struct{},
+	args *[]any,
+) (string, error) {
+	if _, ok := columns[p.Column]; !ok {
 		return "", fmt.Errorf("unknown column %q on table %q", p.Column, t.Name)
 	}
 
@@ -233,14 +252,19 @@ func isOp(quotedCol, literal string) (string, error) {
 	}
 }
 
-func buildOrderBy(items []query.OrderItem, t *schema.Table, d dialect.Dialect) (string, error) {
+func buildOrderBy(
+	items []query.OrderItem,
+	t *schema.Table,
+	d dialect.Dialect,
+	columns map[string]struct{},
+) (string, error) {
 	if len(items) == 0 {
 		return "", nil
 	}
 
 	parts := make([]string, 0, len(items))
 	for _, it := range items {
-		if !columnExists(t, it.Column) {
+		if _, ok := columns[it.Column]; !ok {
 			return "", fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
 		}
 
@@ -255,12 +279,11 @@ func buildOrderBy(items []query.OrderItem, t *schema.Table, d dialect.Dialect) (
 	return strings.Join(parts, ", "), nil
 }
 
-func columnExists(t *schema.Table, name string) bool {
+func columnSet(t *schema.Table) map[string]struct{} {
+	set := make(map[string]struct{}, len(t.Columns))
 	for _, c := range t.Columns {
-		if c.Name == name {
-			return true
-		}
+		set[c.Name] = struct{}{}
 	}
 
-	return false
+	return set
 }
