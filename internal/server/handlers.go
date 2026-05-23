@@ -44,7 +44,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, args, err := build.Select(q, table, s.dialect, s.defaultLimit, s.maxLimit)
+	stmt, args, err := build.Select(q, table, s.tableIndex, s.dialect, s.defaultLimit, s.maxLimit)
 	if err != nil {
 		writeProblem(w, r, s.logger, http.StatusBadRequest,
 			"invalid-query", "Invalid query", err.Error())

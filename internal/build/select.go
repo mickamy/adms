@@ -22,7 +22,13 @@ import (
 // defaultLimit and maxLimit must both be positive, and defaultLimit must
 // not exceed maxLimit; otherwise Select returns an error without inspecting
 // the rest of the query.
-func Select(q query.Query, t *schema.Table, d dialect.Dialect, defaultLimit, maxLimit int) (string, []any, error) {
+func Select(
+	q query.Query,
+	t *schema.Table,
+	lookup SchemaLookup,
+	d dialect.Dialect,
+	defaultLimit, maxLimit int,
+) (string, []any, error) {
 	if defaultLimit <= 0 {
 		return "", nil, fmt.Errorf("defaultLimit must be positive, got %d", defaultLimit)
 	}
@@ -37,7 +43,7 @@ func Select(q query.Query, t *schema.Table, d dialect.Dialect, defaultLimit, max
 
 	columns := columnSet(t)
 
-	cols, err := buildSelectClause(q.Select, t, d, columns)
+	cols, err := buildSelectClause(q.Select, t, lookup, d, columns)
 	if err != nil {
 		return "", nil, err
 	}
@@ -103,6 +109,7 @@ func qualifiedTable(t *schema.Table, d dialect.Dialect) string {
 func buildSelectClause(
 	items []query.SelectItem,
 	t *schema.Table,
+	lookup SchemaLookup,
 	d dialect.Dialect,
 	columns map[string]struct{},
 ) (string, error) {
@@ -110,12 +117,37 @@ func buildSelectClause(
 		return "*", nil
 	}
 
-	var hasStar, hasNamed bool
+	var hasStar, hasNamedCol bool
 
 	seen := make(map[string]struct{}, len(items))
 	parts := make([]string, 0, len(items))
 
 	for _, it := range items {
+		if it.Embed != nil {
+			if lookup == nil {
+				return "", fmt.Errorf("embedded relation %q requires a schema lookup", it.Embed.Relation)
+			}
+
+			alias := it.Alias
+			if alias == "" {
+				alias = it.Embed.Relation
+			}
+
+			if _, dup := seen[alias]; dup {
+				return "", fmt.Errorf("duplicate select alias %q", alias)
+			}
+
+			seen[alias] = struct{}{}
+
+			sub, err := buildEmbedSubquery(it, t, lookup, d)
+			if err != nil {
+				return "", err
+			}
+
+			parts = append(parts, sub)
+			continue
+		}
+
 		if it.Column == "*" {
 			if hasStar {
 				return "", errors.New("select '*' specified more than once")
@@ -126,7 +158,7 @@ func buildSelectClause(
 			continue
 		}
 
-		hasNamed = true
+		hasNamedCol = true
 
 		if _, ok := columns[it.Column]; !ok {
 			return "", fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
@@ -142,8 +174,9 @@ func buildSelectClause(
 	}
 
 	// Mixing "*" with named columns yields duplicate keys after rowsToJSON
-	// flattens the result into a map[string]any.
-	if hasStar && hasNamed {
+	// flattens the result into a map[string]any. Embeds are emitted under
+	// their own alias, so they are allowed alongside "*".
+	if hasStar && hasNamedCol {
 		return "", errors.New("select cannot mix '*' with named columns")
 	}
 
