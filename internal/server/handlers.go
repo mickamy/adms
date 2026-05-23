@@ -84,16 +84,19 @@ func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
 		return nil, fmt.Errorf("columns: %w", err)
 	}
 
+	// Allocate scan buffers once. rows.Scan overwrites values[i] each iteration
+	// and ptrs[i] keeps pointing at the same slot, so there is nothing to reset
+	// between rows.
+	values := make([]any, len(cols))
+	ptrs := make([]any, len(cols))
+
+	for i := range values {
+		ptrs[i] = &values[i]
+	}
+
 	result := make([]map[string]any, 0)
 
 	for rows.Next() {
-		values := make([]any, len(cols))
-		ptrs := make([]any, len(cols))
-
-		for i := range values {
-			ptrs[i] = &values[i]
-		}
-
 		if err := rows.Scan(ptrs...); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
