@@ -205,6 +205,8 @@ func TestParse_Error(t *testing.T) {
 		{"duplicate order", url.Values{"order": {"id.asc", "name.asc"}}},
 		{"duplicate limit", url.Values{"limit": {"10", "20"}}},
 		{"duplicate offset", url.Values{"offset": {"0", "10"}}},
+		{"empty column", url.Values{"": {"eq.1"}}},
+		{"group element with empty column", url.Values{"or": {"(.eq.1,b.eq.2)"}}},
 	}
 
 	for _, tt := range tests {

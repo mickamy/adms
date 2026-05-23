@@ -195,6 +195,10 @@ func parseOrder(s string) ([]OrderItem, error) {
 // parsePredicate parses a single "column = value" pair where value is
 // "op.literal", "not.op.literal", "in.(v1,v2,...)", or "is.null|true|false".
 func parsePredicate(column, value string) (Predicate, error) {
+	if strings.TrimSpace(column) == "" {
+		return Predicate{}, errors.New("invalid filter: empty column name")
+	}
+
 	not := false
 	raw := value
 
@@ -205,12 +209,12 @@ func parsePredicate(column, value string) (Predicate, error) {
 
 	opStr, val, ok := strings.Cut(raw, ".")
 	if !ok {
-		return Predicate{}, fmt.Errorf("invalid filter %s=%s: missing operator separator", column, value)
+		return Predicate{}, fmt.Errorf("invalid filter %q=%q: missing operator separator", column, value)
 	}
 
 	op, err := parseOperator(opStr)
 	if err != nil {
-		return Predicate{}, fmt.Errorf("invalid filter %s=%s: %w", column, value, err)
+		return Predicate{}, fmt.Errorf("invalid filter %q=%q: %w", column, value, err)
 	}
 
 	switch op {
