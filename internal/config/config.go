@@ -96,14 +96,14 @@ func buildConfig(c config) (Config, error) {
 		logLevel = DefaultLogLevel
 	}
 
-	defaultLimit := c.DefaultLimit
-	if defaultLimit == 0 {
-		defaultLimit = DefaultLimit
+	defaultLimit := DefaultLimit
+	if c.DefaultLimit != nil {
+		defaultLimit = *c.DefaultLimit
 	}
 
-	maxLimit := c.MaxLimit
-	if maxLimit == 0 {
-		maxLimit = DefaultMaxLimit
+	maxLimit := DefaultMaxLimit
+	if c.MaxLimit != nil {
+		maxLimit = *c.MaxLimit
 	}
 
 	if defaultLimit <= 0 {

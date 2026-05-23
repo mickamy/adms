@@ -300,11 +300,27 @@ default_limit: -1`,
 			wantErr: "default_limit",
 		},
 		{
+			name:     "explicit zero default_limit rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+default_limit: 0`,
+			wantErr: "default_limit",
+		},
+		{
 			name:     "negative max_limit rejected",
 			filename: "adms.yaml",
 			body: `driver: postgres
 dsn: x
 max_limit: -1`,
+			wantErr: "max_limit",
+		},
+		{
+			name:     "explicit zero max_limit rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+max_limit: 0`,
 			wantErr: "max_limit",
 		},
 		{
