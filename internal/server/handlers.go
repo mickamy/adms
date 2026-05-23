@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -51,9 +52,12 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	queryCtx, cancel := context.WithTimeout(r.Context(), s.timeout)
+	defer cancel()
+
 	// stmt is constructed by build.Select with identifiers validated against the
 	// introspected schema; values are passed as placeholder args, not interpolated.
-	rows, err := s.db.QueryContext(r.Context(), stmt, args...) //nolint:gosec // see comment above
+	rows, err := s.db.QueryContext(queryCtx, stmt, args...) //nolint:gosec // see comment above
 	if err != nil {
 		fmt.Fprintf(s.logger, "adms: query %s %s: %v\n", r.Method, r.URL.EscapedPath(), err)
 		writeProblem(w, r, s.logger, http.StatusInternalServerError,
