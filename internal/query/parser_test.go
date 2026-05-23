@@ -227,7 +227,6 @@ func TestParse_Error(t *testing.T) {
 		{"limit negative", url.Values{"limit": {"-1"}}},
 		{"offset non-integer", url.Values{"offset": {"abc"}}},
 		{"offset negative", url.Values{"offset": {"-5"}}},
-		{"select embedded rejected", url.Values{"select": {"posts(id)"}}},
 		{"or group missing parens", url.Values{"or": {"a.eq.1,b.eq.2"}}},
 		{"or group unmatched open", url.Values{"or": {"(a.eq.1"}}},
 		{"or group unmatched close", url.Values{"or": {"a.eq.1)"}}},

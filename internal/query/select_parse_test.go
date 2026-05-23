@@ -29,6 +29,77 @@ func TestSelect_OK(t *testing.T) {
 			{Column: "name"},
 		}},
 		{"whitespace-only select yields no items", "   ", nil},
+		{
+			name: "embedded relation with columns",
+			in:   "posts(id,title)",
+			want: []query.SelectItem{{
+				Embed: &query.Embed{
+					Relation: "posts",
+					Items: []query.SelectItem{
+						{Column: "id"},
+						{Column: "title"},
+					},
+				},
+			}},
+		},
+		{
+			name: "embedded relation with asterisk",
+			in:   "posts(*)",
+			want: []query.SelectItem{{
+				Embed: &query.Embed{
+					Relation: "posts",
+					Items:    []query.SelectItem{{Column: "*"}},
+				},
+			}},
+		},
+		{
+			name: "aliased embed",
+			in:   "author:users(id,name)",
+			want: []query.SelectItem{{
+				Alias: "author",
+				Embed: &query.Embed{
+					Relation: "users",
+					Items: []query.SelectItem{
+						{Column: "id"},
+						{Column: "name"},
+					},
+				},
+			}},
+		},
+		{
+			name: "mix of column and embed",
+			in:   "id,name,posts(id,title)",
+			want: []query.SelectItem{
+				{Column: "id"},
+				{Column: "name"},
+				{Embed: &query.Embed{
+					Relation: "posts",
+					Items: []query.SelectItem{
+						{Column: "id"},
+						{Column: "title"},
+					},
+				}},
+			},
+		},
+		{
+			name: "nested embed is parsed (build layer may still reject)",
+			in:   "posts(id,comments(id,body))",
+			want: []query.SelectItem{{
+				Embed: &query.Embed{
+					Relation: "posts",
+					Items: []query.SelectItem{
+						{Column: "id"},
+						{Embed: &query.Embed{
+							Relation: "comments",
+							Items: []query.SelectItem{
+								{Column: "id"},
+								{Column: "body"},
+							},
+						}},
+					},
+				},
+			}},
+		},
 	}
 
 	for _, tt := range tests {
@@ -41,7 +112,7 @@ func TestSelect_OK(t *testing.T) {
 			}
 
 			if !reflect.DeepEqual(q.Select, tt.want) {
-				t.Errorf("Select = %#v, want %#v", q.Select, tt.want)
+				t.Errorf("Select =\n  %#v\nwant\n  %#v", q.Select, tt.want)
 			}
 		})
 	}
@@ -58,8 +129,12 @@ func TestSelect_Error(t *testing.T) {
 		{"trailing comma", "id,", "empty select item"},
 		{"leading comma", ",id", "empty select item"},
 		{"double comma", "id,,name", "empty select item"},
-		{"embedded relation", "posts(id,title)", "embedded select"},
-		{"aliased column", "author:users", "aliased select"},
+		{"aliased column without embed", "author:users", "aliased column"},
+		{"empty alias", ":users(id)", "empty alias"},
+		{"empty relation", "(id)", "empty relation name"},
+		{"unmatched open paren in embed", "posts(id,title", "unmatched"},
+		{"unmatched close paren in embed", "posts(id))", "unmatched"},
+		{"relation name with space", "po sts(id)", "invalid relation name"},
 	}
 
 	for _, tt := range tests {
