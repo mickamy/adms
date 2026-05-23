@@ -243,6 +243,11 @@ func TestParse_Error(t *testing.T) {
 		{"group element with empty column", url.Values{"or": {"(.eq.1,b.eq.2)"}}},
 		{"group element with whitespace-only column", url.Values{"or": {"( .eq.1,b.eq.2)"}}},
 		{"order whitespace-only column", url.Values{"order": {"  .desc"}}},
+		{"group inner has unmatched open paren", url.Values{"or": {"(a.eq.1,(b.eq.2)"}}},
+		{"group inner has unmatched close paren", url.Values{"or": {"(a.eq.1,b.eq.2))"}}},
+		{"group element without operator separator", url.Values{"or": {"(no_dot,a.eq.1)"}}},
+		{"nested or= with trailing chars after close paren", url.Values{"or": {"(or=(a.eq.1)x,b.eq.2)"}}},
+		{"nested and= with trailing chars after close paren", url.Values{"or": {"(and=(a.eq.1)x,b.eq.2)"}}},
 	}
 
 	for _, tt := range tests {

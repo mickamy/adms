@@ -28,6 +28,7 @@ func TestSelect_OK(t *testing.T) {
 			{Column: "id"},
 			{Column: "name"},
 		}},
+		{"whitespace-only select yields no items", "   ", nil},
 	}
 
 	for _, tt := range tests {

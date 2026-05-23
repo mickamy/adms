@@ -29,9 +29,10 @@ func NewWithIntrospector(
 }
 
 var (
-	Recoverer          = recoverer
-	Logging            = logging
-	NormalizeScanValue = normalizeScanValue
+	Recoverer           = recoverer
+	Logging             = logging
+	NormalizeScanValue  = normalizeScanValue
+	FilterAllowedTables = filterAllowedTables
 )
 
 const ProblemTypePrefix = problemTypePrefix

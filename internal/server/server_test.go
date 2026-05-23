@@ -538,6 +538,62 @@ func httpProbe(ctx context.Context, url string) (*http.Response, error) {
 	return http.DefaultClient.Do(req) //nolint:wrapcheck // same as above
 }
 
+func TestFilterAllowedTables(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{Schema: "public", Name: "users"},
+			{Schema: "public", Name: "posts"},
+			{Schema: "internal", Name: "audit_log"},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		allowed   []string
+		wantNames []string
+	}{
+		{"nil allow list keeps every table", nil, []string{"users", "posts", "audit_log"}},
+		{"empty allow list keeps every table", []string{}, []string{"users", "posts", "audit_log"}},
+		{"subset keeps only listed tables", []string{"users", "posts"}, []string{"users", "posts"}},
+		{"single match keeps just one", []string{"users"}, []string{"users"}},
+		{"no match yields empty schema", []string{"ghost"}, []string{}},
+		{"all match keeps every table", []string{"users", "posts", "audit_log"}, []string{"users", "posts", "audit_log"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := server.FilterAllowedTables(sch, tt.allowed)
+
+			gotNames := make([]string, 0, len(got.Tables))
+			for _, table := range got.Tables {
+				gotNames = append(gotNames, table.Name)
+			}
+
+			if !equalStringSlices(gotNames, tt.wantNames) {
+				t.Errorf("names = %v, want %v", gotNames, tt.wantNames)
+			}
+		})
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
 	t.Parallel()
 

@@ -352,6 +352,18 @@ func TestSelect_Errors(t *testing.T) {
 				Filter: query.Predicate{Column: "id", Op: query.OpIn, Value: "1,,3"},
 			},
 		},
+		{
+			name: "unknown operator triggers internal default branch",
+			q: query.Query{
+				Filter: query.Predicate{Column: "id", Op: query.Operator(99), Value: "1"},
+			},
+		},
+		{
+			name: "invalid is literal triggers internal default branch",
+			q: query.Query{
+				Filter: query.Predicate{Column: "id", Op: query.OpIs, Value: "maybe"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
