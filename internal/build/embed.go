@@ -32,21 +32,76 @@ type relation struct {
 // resolveRelation finds a foreign-key path between parent and child. It first
 // checks whether the parent itself has an FK pointing at child (many-to-one),
 // and otherwise looks for an FK on child that points back at parent
-// (one-to-many).
+// (one-to-many). Multiple FKs between the same pair are reported as
+// ambiguous so the operator can disambiguate with explicit syntax later.
+//
+// ForeignKey.Table is populated by the schema introspector with a
+// "schema.name" qualified name (see schema.qualify), so we compare against
+// the same qualified form rather than just Table.Name.
 func resolveRelation(parent, child *schema.Table) (relation, error) {
-	for _, fk := range parent.ForeignKeys {
-		if fk.Table == child.Name {
-			return relation{dir: relManyToOne, parentKeys: fk.Columns, childKeys: fk.References}, nil
+	parentQual := qualifiedTableName(parent)
+	childQual := qualifiedTableName(child)
+
+	var manyToOne *schema.ForeignKey
+
+	for i, fk := range parent.ForeignKeys {
+		if fk.Table != childQual {
+			continue
 		}
+
+		if manyToOne != nil {
+			return relation{}, fmt.Errorf(
+				"ambiguous relation: multiple foreign keys from %q to %q", parent.Name, child.Name)
+		}
+
+		manyToOne = &parent.ForeignKeys[i]
 	}
 
-	for _, fk := range child.ForeignKeys {
-		if fk.Table == parent.Name {
-			return relation{dir: relOneToMany, parentKeys: fk.References, childKeys: fk.Columns}, nil
+	var oneToMany *schema.ForeignKey
+
+	for i, fk := range child.ForeignKeys {
+		if fk.Table != parentQual {
+			continue
 		}
+
+		if oneToMany != nil {
+			return relation{}, fmt.Errorf(
+				"ambiguous relation: multiple foreign keys from %q to %q", child.Name, parent.Name)
+		}
+
+		oneToMany = &child.ForeignKeys[i]
+	}
+
+	if manyToOne != nil && oneToMany != nil {
+		return relation{}, fmt.Errorf(
+			"ambiguous relation: foreign keys exist in both directions between %q and %q",
+			parent.Name, child.Name)
+	}
+
+	if manyToOne != nil {
+		return relation{dir: relManyToOne, parentKeys: manyToOne.Columns, childKeys: manyToOne.References}, nil
+	}
+
+	if oneToMany != nil {
+		return relation{dir: relOneToMany, parentKeys: oneToMany.References, childKeys: oneToMany.Columns}, nil
 	}
 
 	return relation{}, fmt.Errorf("no foreign key relation between %q and %q", parent.Name, child.Name)
+}
+
+func qualifiedTableName(t *schema.Table) string {
+	if t.Schema == "" {
+		return t.Name
+	}
+
+	return t.Schema + "." + t.Name
+}
+
+// sqlStringLiteral renders s as a single-quoted SQL string literal with
+// embedded single quotes doubled per the SQL standard. Used for JSON keys
+// emitted into the SELECT list.
+func sqlStringLiteral(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // buildEmbedSubquery emits the SELECT alias clause for an embedded relation.
@@ -88,7 +143,7 @@ func buildEmbedSubquery(
 
 	pairs := make([]string, 0, len(fieldNames)*2)
 	for _, name := range fieldNames {
-		pairs = append(pairs, "'"+name+"'")
+		pairs = append(pairs, sqlStringLiteral(name))
 		pairs = append(pairs, childTableQuoted+"."+d.Quote(name))
 	}
 

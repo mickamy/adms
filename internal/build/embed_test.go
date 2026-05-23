@@ -2,6 +2,7 @@ package build_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/mickamy/adms/internal/build"
@@ -39,7 +40,7 @@ func usersAndPostsLookup() testLookup {
 			{Name: "title"},
 		},
 		ForeignKeys: []schema.ForeignKey{
-			{Table: "users", Columns: []string{"user_id"}, References: []string{"id"}},
+			{Table: "public.users", Columns: []string{"user_id"}, References: []string{"id"}},
 		},
 	}
 
@@ -152,6 +153,52 @@ func TestSelect_EmbedPostgres(t *testing.T) {
 				t.Errorf("args = %#v, want nil", args)
 			}
 		})
+	}
+}
+
+func TestSelect_EmbedEscapesSingleQuoteInColumnName(t *testing.T) {
+	t.Parallel()
+
+	users := &schema.Table{
+		Schema:     "public",
+		Name:       "users",
+		PrimaryKey: []string{"id"},
+		Columns:    []schema.Column{{Name: "id"}},
+	}
+	posts := &schema.Table{
+		Schema:     "public",
+		Name:       "posts",
+		PrimaryKey: []string{"id"},
+		Columns: []schema.Column{
+			{Name: "id"},
+			{Name: "user_id"},
+			{Name: "o'brien"},
+		},
+		ForeignKeys: []schema.ForeignKey{
+			{Table: "public.users", Columns: []string{"user_id"}, References: []string{"id"}},
+		},
+	}
+	lookup := testLookup{"users": users, "posts": posts}
+
+	q := query.Query{
+		Select: []query.SelectItem{{
+			Embed: &query.Embed{
+				Relation: "posts",
+				Items: []query.SelectItem{
+					{Column: "id"},
+					{Column: "o'brien"},
+				},
+			},
+		}},
+	}
+
+	sql, _, err := build.Select(q, users, lookup, dialect.Postgres(), 100, 1000)
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+
+	if !strings.Contains(sql, "'o''brien'") {
+		t.Errorf("SQL = %s\nwant it to contain 'o''brien' (escaped single quote)", sql)
 	}
 }
 
@@ -275,6 +322,43 @@ func TestSelect_EmbedErrors(t *testing.T) {
 				Select: []query.SelectItem{
 					{Embed: &query.Embed{Relation: "posts"}},
 					{Alias: "posts", Embed: &query.Embed{Relation: "posts"}},
+				},
+			},
+		},
+		{
+			name:   "ambiguous one-to-many: two FKs from child to parent",
+			parent: users,
+			lookup: testLookup{
+				"users": users,
+				"messages": &schema.Table{
+					Schema:     "public",
+					Name:       "messages",
+					PrimaryKey: []string{"id"},
+					Columns: []schema.Column{
+						{Name: "id"},
+						{Name: "sender_id"},
+						{Name: "recipient_id"},
+					},
+					ForeignKeys: []schema.ForeignKey{
+						{Table: "public.users", Columns: []string{"sender_id"}, References: []string{"id"}},
+						{Table: "public.users", Columns: []string{"recipient_id"}, References: []string{"id"}},
+					},
+				},
+			},
+			q: query.Query{
+				Select: []query.SelectItem{
+					{Embed: &query.Embed{Relation: "messages"}},
+				},
+			},
+		},
+		{
+			name:   "star and embed alias collide on base column name",
+			parent: users,
+			lookup: lookup,
+			q: query.Query{
+				Select: []query.SelectItem{
+					{Column: "*"},
+					{Alias: "id", Embed: &query.Embed{Relation: "posts"}},
 				},
 			},
 		},
