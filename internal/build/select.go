@@ -1,6 +1,7 @@
 package build
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -109,18 +110,29 @@ func buildSelectClause(
 		return "*", nil
 	}
 
+	var hasStar, hasNamed bool
+
 	parts := make([]string, 0, len(items))
 	for _, it := range items {
 		if it.Column == "*" {
+			hasStar = true
 			parts = append(parts, "*")
 			continue
 		}
+
+		hasNamed = true
 
 		if _, ok := columns[it.Column]; !ok {
 			return "", fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
 		}
 
 		parts = append(parts, d.Quote(it.Column))
+	}
+
+	// Mixing "*" with named columns yields duplicate keys after rowsToJSON
+	// flattens the result into a map[string]any.
+	if hasStar && hasNamed {
+		return "", errors.New("select cannot mix '*' with named columns")
 	}
 
 	return strings.Join(parts, ", "), nil

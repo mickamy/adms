@@ -50,13 +50,6 @@ func TestSelect_Postgres(t *testing.T) {
 			wantSQL: `SELECT "id", "name" FROM "public"."users" LIMIT 100 OFFSET 0`,
 		},
 		{
-			name: "select with asterisk among columns",
-			q: query.Query{
-				Select: []query.SelectItem{{Column: "*"}, {Column: "age"}},
-			},
-			wantSQL: `SELECT *, "age" FROM "public"."users" LIMIT 100 OFFSET 0`,
-		},
-		{
 			name: "eq filter",
 			q: query.Query{
 				Filter: query.Predicate{Column: "id", Op: query.OpEq, Value: "42"},
@@ -356,6 +349,12 @@ func TestSelect_Errors(t *testing.T) {
 			name: "unknown operator triggers internal default branch",
 			q: query.Query{
 				Filter: query.Predicate{Column: "id", Op: query.Operator(99), Value: "1"},
+			},
+		},
+		{
+			name: "select cannot mix * with named columns",
+			q: query.Query{
+				Select: []query.SelectItem{{Column: "*"}, {Column: "age"}},
 			},
 		},
 		{
