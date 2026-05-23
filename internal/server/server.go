@@ -61,6 +61,12 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		return nil, errors.New("server: max_limit must be positive")
 	}
 
+	if cfg.DefaultLimit > cfg.MaxLimit {
+		return nil, fmt.Errorf(
+			"server: default_limit (%d) must not exceed max_limit (%d)",
+			cfg.DefaultLimit, cfg.MaxLimit)
+	}
+
 	dlc, err := cfg.Driver.Dialect()
 	if err != nil {
 		return nil, err //nolint:wrapcheck // Driver.Dialect returns a descriptive error already.

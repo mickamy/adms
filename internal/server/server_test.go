@@ -356,6 +356,29 @@ func TestNewRejectsUnknownDriver(t *testing.T) {
 	}
 }
 
+func TestNewRejectsDefaultLimitExceedingMaxLimit(t *testing.T) {
+	t.Parallel()
+
+	_, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 500,
+			MaxLimit:     100,
+		},
+		nil,
+		stubIntrospector{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("NewWithIntrospector error = nil, want error for default_limit > max_limit")
+	}
+
+	if !strings.Contains(err.Error(), "default_limit") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "default_limit")
+	}
+}
+
 func TestNewRequiresPositiveTimeout(t *testing.T) {
 	t.Parallel()
 
