@@ -32,7 +32,7 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 			DefaultLimit: 100,
 			MaxLimit:     1000,
 		},
-		nil,
+		stubDB,
 		stubIntrospector{schema: sch},
 		&logs,
 	)
@@ -49,6 +49,11 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 
 	return ts, &logs
 }
+
+// stubDB is a non-nil but inert sentinel for tests that do not exercise the
+// DB. Server construction now rejects nil DBs, and these tests reach the
+// handler only on error paths that return before any DB call.
+var stubDB = &sql.DB{}
 
 type stubIntrospector struct {
 	schema schema.Schema
@@ -248,7 +253,7 @@ func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
 			DefaultLimit: 100,
 			MaxLimit:     1000,
 		},
-		nil,
+		stubDB,
 		stubIntrospector{},
 		nil, // Logger left nil
 	)
@@ -344,7 +349,7 @@ func TestNewRejectsUnknownDriver(t *testing.T) {
 			DefaultLimit: 100,
 			MaxLimit:     1000,
 		},
-		nil,
+		stubDB,
 		nil,
 	)
 	if err == nil {
@@ -353,6 +358,29 @@ func TestNewRejectsUnknownDriver(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "unknown driver") {
 		t.Errorf("New() error = %q, want substring %q", err, "unknown driver")
+	}
+}
+
+func TestNewRequiresDB(t *testing.T) {
+	t.Parallel()
+
+	_, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		nil,
+		stubIntrospector{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("NewWithIntrospector error = nil, want error for nil db")
+	}
+
+	if !strings.Contains(err.Error(), "db is required") {
+		t.Errorf("error = %q, want substring %q", err.Error(), "db is required")
 	}
 }
 
@@ -366,7 +394,7 @@ func TestNewRejectsDefaultLimitExceedingMaxLimit(t *testing.T) {
 			DefaultLimit: 500,
 			MaxLimit:     100,
 		},
-		nil,
+		stubDB,
 		stubIntrospector{},
 		nil,
 	)
@@ -384,7 +412,7 @@ func TestNewRequiresPositiveTimeout(t *testing.T) {
 
 	_, err := server.NewWithIntrospector(
 		config.Config{},
-		nil,
+		stubDB,
 		stubIntrospector{},
 		nil,
 	)
@@ -410,7 +438,7 @@ func TestServerRunReturnsListenFailure(t *testing.T) {
 			DefaultLimit: 100,
 			MaxLimit:     1000,
 		},
-		nil,
+		stubDB,
 		stubIntrospector{},
 		&logs,
 	)
@@ -444,7 +472,7 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 			DefaultLimit: 100,
 			MaxLimit:     1000,
 		},
-		nil,
+		stubDB,
 		stubIntrospector{},
 		&logs,
 	)
@@ -529,7 +557,7 @@ func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
 			DefaultLimit: 100,
 			MaxLimit:     1000,
 		},
-		nil,
+		stubDB,
 		stubIntrospector{schema: sch},
 		&logs,
 	)

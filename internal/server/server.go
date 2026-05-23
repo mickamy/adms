@@ -49,6 +49,10 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		return nil, errors.New("server: introspector is required")
 	}
 
+	if db == nil {
+		return nil, errors.New("server: db is required")
+	}
+
 	if cfg.Timeout <= 0 {
 		return nil, errors.New("server: timeout must be positive")
 	}
