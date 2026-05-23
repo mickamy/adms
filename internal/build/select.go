@@ -11,9 +11,16 @@ import (
 )
 
 // Select converts a parsed Query against the given table into a SELECT
-// statement and bound arguments. It validates that every referenced
+// statement, bound arguments, and the list of result columns that hold
+// JSON payloads from embedded subqueries (so the caller can json.Unmarshal
+// them before serialising each row). It validates that every referenced
 // identifier exists on the table (select / filter / order) before emitting
 // SQL, so callers can rely on a fully sanitized statement.
+//
+// lookup resolves the target table of an embedded relation
+// (e.g., "*,posts(id,title)" needs to find "posts"). It may be nil when
+// q.Select contains no embeds; if any embed is present and lookup is nil,
+// Select returns an error.
 //
 // Limit handling: q.Limit is clamped to [1, maxLimit]; nil falls back to
 // defaultLimit. Offset defaults to 0. Both are emitted as literal integers
