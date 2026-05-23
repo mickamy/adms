@@ -112,9 +112,15 @@ func buildSelectClause(
 
 	var hasStar, hasNamed bool
 
+	seen := make(map[string]struct{}, len(items))
 	parts := make([]string, 0, len(items))
+
 	for _, it := range items {
 		if it.Column == "*" {
+			if hasStar {
+				return "", errors.New("select '*' specified more than once")
+			}
+
 			hasStar = true
 			parts = append(parts, "*")
 			continue
@@ -125,6 +131,12 @@ func buildSelectClause(
 		if _, ok := columns[it.Column]; !ok {
 			return "", fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
 		}
+
+		if _, dup := seen[it.Column]; dup {
+			return "", fmt.Errorf("duplicate select column %q", it.Column)
+		}
+
+		seen[it.Column] = struct{}{}
 
 		parts = append(parts, d.Quote(it.Column))
 	}

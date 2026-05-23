@@ -358,6 +358,18 @@ func TestSelect_Errors(t *testing.T) {
 			},
 		},
 		{
+			name: "select cannot repeat * twice",
+			q: query.Query{
+				Select: []query.SelectItem{{Column: "*"}, {Column: "*"}},
+			},
+		},
+		{
+			name: "select cannot list the same column twice",
+			q: query.Query{
+				Select: []query.SelectItem{{Column: "id"}, {Column: "id"}},
+			},
+		},
+		{
 			name: "invalid is literal triggers internal default branch",
 			q: query.Query{
 				Filter: query.Predicate{Column: "id", Op: query.OpIs, Value: "maybe"},
