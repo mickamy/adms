@@ -117,9 +117,40 @@ func buildSelectClause(
 		return "*", nil
 	}
 
+	// First pass: validate "*" usage and decide whether to seed `seen` with
+	// the base-table columns so embed aliases cannot collide with them.
 	var hasStar, hasNamedCol bool
 
+	for _, it := range items {
+		if it.Embed != nil {
+			continue
+		}
+
+		if it.Column == "*" {
+			if hasStar {
+				return "", errors.New("select '*' specified more than once")
+			}
+
+			hasStar = true
+			continue
+		}
+
+		hasNamedCol = true
+	}
+
+	if hasStar && hasNamedCol {
+		return "", errors.New("select cannot mix '*' with named columns")
+	}
+
 	seen := make(map[string]struct{}, len(items))
+
+	if hasStar {
+		for _, c := range t.Columns {
+			seen[c.Name] = struct{}{}
+		}
+	}
+
+	// Second pass: emit SQL fragments and detect duplicates.
 	parts := make([]string, 0, len(items))
 
 	for _, it := range items {
@@ -149,16 +180,9 @@ func buildSelectClause(
 		}
 
 		if it.Column == "*" {
-			if hasStar {
-				return "", errors.New("select '*' specified more than once")
-			}
-
-			hasStar = true
 			parts = append(parts, "*")
 			continue
 		}
-
-		hasNamedCol = true
 
 		if _, ok := columns[it.Column]; !ok {
 			return "", fmt.Errorf("unknown column %q on table %q", it.Column, t.Name)
@@ -171,13 +195,6 @@ func buildSelectClause(
 		seen[it.Column] = struct{}{}
 
 		parts = append(parts, d.Quote(it.Column))
-	}
-
-	// Mixing "*" with named columns yields duplicate keys after rowsToJSON
-	// flattens the result into a map[string]any. Embeds are emitted under
-	// their own alias, so they are allowed alongside "*".
-	if hasStar && hasNamedCol {
-		return "", errors.New("select cannot mix '*' with named columns")
 	}
 
 	return strings.Join(parts, ", "), nil
