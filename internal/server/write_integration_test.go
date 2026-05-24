@@ -88,8 +88,8 @@ func writeFixturePostgres(t *testing.T, fn func(ctx testCtx)) {
 }
 
 // uniqueTableName turns a test name into a PG-safe identifier; only ASCII
-// letters and underscores survive, so siblings of the same TestFoo run
-// against distinct tables.
+// letters, digits, and underscores survive, so siblings of the same TestFoo
+// run against distinct tables.
 func uniqueTableName(testName string) string {
 	var b strings.Builder
 

@@ -345,3 +345,85 @@ func TestPatch_RejectsEmptyObject(t *testing.T) {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 }
+
+func TestPost_RejectsBodyOver10MiB(t *testing.T) {
+	t.Parallel()
+
+	ts, _ := newTestServer(t, usersSchema())
+
+	// http.MaxBytesReader fires MaxBytesError once the underlying stream
+	// exceeds the cap, so a body just past the limit is enough.
+	big := strings.Repeat("a", (10<<20)+1)
+
+	resp := httpRequest(t, http.MethodPost, ts.URL+"/users", big)
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want 413", resp.StatusCode)
+	}
+
+	var p server.Problem
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if !strings.HasSuffix(p.Type, "body-too-large") {
+		t.Errorf("Problem.Type = %q, want suffix %q", p.Type, "body-too-large")
+	}
+}
+
+func TestPost_RepresentationUnsupportedOnMySQL(t *testing.T) {
+	t.Parallel()
+
+	var logs syncBuffer
+
+	srv, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverMySQL,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		stubDB,
+		stubIntrospector{schema: usersSchema()},
+		&logs,
+	)
+	if err != nil {
+		t.Fatalf("server.NewWithIntrospector: %v", err)
+	}
+
+	if err := srv.Prepare(t.Context()); err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		ts.URL+"/users", strings.NewReader(`{"id":1,"name":"alice"}`))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Prefer", "return=representation")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Errorf("status = %d, want 501", resp.StatusCode)
+	}
+
+	var p server.Problem
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if !strings.HasSuffix(p.Type, "unsupported") {
+		t.Errorf("Problem.Type = %q, want suffix %q", p.Type, "unsupported")
+	}
+}
