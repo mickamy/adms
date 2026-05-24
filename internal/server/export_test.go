@@ -29,13 +29,22 @@ func NewWithIntrospector(
 }
 
 var (
-	Recoverer           = recoverer
-	Logging             = logging
-	NormalizeScanValue  = normalizeScanValue
-	FilterAllowedTables = filterAllowedTables
+	Recoverer            = recoverer
+	Logging              = logging
+	NormalizeScanValue   = normalizeScanValue
+	FilterAllowedTables  = filterAllowedTables
+	ParsePrefer          = parsePrefer
+	ContentRangeReturned = contentRangeReturned
 )
 
 const ProblemTypePrefix = problemTypePrefix
+
+const (
+	PreferReturnMinimal        = preferReturnMinimal
+	PreferReturnRepresentation = preferReturnRepresentation
+)
+
+type PreferDirective = preferDirective
 
 func WriteProblem(
 	w http.ResponseWriter,

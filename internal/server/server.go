@@ -27,6 +27,7 @@ type Server struct {
 	allowedTables  []string
 	defaultLimit   int
 	maxLimit       int
+	readOnly       bool
 	timeout        time.Duration
 	logger         io.Writer
 
@@ -98,6 +99,7 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		allowedTables:  cfg.AllowedTables,
 		defaultLimit:   cfg.DefaultLimit,
 		maxLimit:       cfg.MaxLimit,
+		readOnly:       cfg.ReadOnly,
 		timeout:        cfg.Timeout,
 		logger:         logger,
 	}, nil
