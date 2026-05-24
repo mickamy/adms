@@ -594,6 +594,79 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
+func TestServerAppliesAuthToken(t *testing.T) {
+	t.Parallel()
+
+	const token = "tk"
+
+	srv, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+			AuthToken:    token,
+		},
+		stubDB,
+		stubIntrospector{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("server.NewWithIntrospector: %v", err)
+	}
+
+	if err := srv.Prepare(t.Context()); err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+
+	t.Run("schema dump requires auth", func(t *testing.T) {
+		t.Parallel()
+
+		resp := httpGet(t, ts.URL+"/")
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401", resp.StatusCode)
+		}
+	})
+
+	t.Run("schema dump accepts valid token", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.URL+"/", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("do: %v", err)
+		}
+
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("status = %d, want 200 with valid token", resp.StatusCode)
+		}
+	})
+
+	t.Run("healthz bypasses auth", func(t *testing.T) {
+		t.Parallel()
+
+		resp := httpGet(t, ts.URL+"/healthz")
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("status = %d, want 200 (/healthz must bypass auth)", resp.StatusCode)
+		}
+	})
+}
+
 func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
 	t.Parallel()
 

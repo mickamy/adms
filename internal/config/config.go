@@ -30,10 +30,13 @@ type Config struct {
 	UI             UIConfig
 	CORSOrigins    []string
 	AuthTokenEnv   string
-	LogLevel       string
-	DefaultLimit   int
-	MaxLimit       int
-	MaxBodyBytes   int64
+	// AuthToken is resolved at runtime by the cli from AuthTokenEnv; the file
+	// loader leaves it empty. An empty value disables bearer auth.
+	AuthToken    string
+	LogLevel     string
+	DefaultLimit int
+	MaxLimit     int
+	MaxBodyBytes int64
 }
 
 type UIConfig struct {

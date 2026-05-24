@@ -31,6 +31,8 @@ func NewWithIntrospector(
 var (
 	Recoverer            = recoverer
 	Logging              = logging
+	AuthBearer           = authBearer
+	BearerToken          = bearerToken
 	NormalizeScanValue   = normalizeScanValue
 	FilterAllowedTables  = filterAllowedTables
 	ParsePrefer          = parsePrefer

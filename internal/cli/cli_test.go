@@ -94,6 +94,22 @@ func TestRun_PreConnectionErrors(t *testing.T) {
 			wantExit:   exit.Usage,
 			wantStderr: `unknown driver "sqlite"`,
 		},
+		{
+			// Env name is unique to this test so the parallel runner cannot race
+			// with another test that happens to set the same variable.
+			name: "auth_token_env points to unset variable",
+			args: func(t *testing.T) []string {
+				p := filepath.Join(t.TempDir(), "adms.yaml")
+				body := "driver: postgres\ndsn: x\nauth_token_env: ADMS_AUTH_TOKEN_NOT_SET_IN_CLI_TEST\n"
+				if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+					t.Fatalf("write fixture: %v", err)
+				}
+
+				return []string{p}
+			},
+			wantExit:   exit.Usage,
+			wantStderr: "auth_token_env",
+		},
 	}
 
 	for _, tt := range tests {
