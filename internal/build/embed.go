@@ -97,6 +97,25 @@ func qualifiedTableName(t *schema.Table) string {
 	return t.Schema + "." + t.Name
 }
 
+// childOrderBy renders the child table's primary key as a comma-separated
+// list of fully qualified column references, e.g. `"posts"."id"`. It returns
+// an empty string when the child has no declared primary key — embeds on
+// such tables stay in whatever order the engine picks.
+func childOrderBy(t *schema.Table, d dialect.Dialect) string {
+	if len(t.PrimaryKey) == 0 {
+		return ""
+	}
+
+	quoted := d.Quote(t.Name)
+	parts := make([]string, 0, len(t.PrimaryKey))
+
+	for _, c := range t.PrimaryKey {
+		parts = append(parts, quoted+"."+d.Quote(c))
+	}
+
+	return strings.Join(parts, ", ")
+}
+
 // buildEmbedSubquery emits the SELECT alias clause for an embedded relation.
 // One-to-many produces a JSON-aggregated correlated subquery; many-to-one
 // produces a JSON_OBJECT subquery with LIMIT 1. Nested embeds are rejected.
@@ -154,7 +173,11 @@ func buildEmbedSubquery(
 
 	var sub string
 	if rel.dir == relOneToMany {
-		agg := d.JSONAgg(objExpr, "")
+		// Order the aggregated children by the child primary key so the JSON
+		// array shape is deterministic. Dialects that cannot accept ORDER BY
+		// inside the aggregate (notably MySQL's JSON_ARRAYAGG) silently drop
+		// the clause — that is best-effort, not a guarantee.
+		agg := d.JSONAgg(objExpr, childOrderBy(child, d))
 		sub = fmt.Sprintf("(SELECT COALESCE(%s, %s) FROM %s WHERE %s)",
 			agg, d.EmptyJSONArray(), childTableExpr, on)
 	} else {

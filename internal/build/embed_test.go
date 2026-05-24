@@ -78,7 +78,7 @@ func TestSelect_EmbedPostgres(t *testing.T) {
 				},
 			},
 			wantSQL: `SELECT "id", "name", (SELECT COALESCE(json_agg(json_build_object(` +
-				`'id', "posts"."id", 'title', "posts"."title")), '[]'::json) ` +
+				`'id', "posts"."id", 'title', "posts"."title") ORDER BY "posts"."id"), '[]'::json) ` +
 				`FROM "public"."posts" WHERE "posts"."user_id" = "users"."id") AS "posts" ` +
 				`FROM "public"."users" LIMIT 100 OFFSET 0`,
 		},
@@ -95,7 +95,8 @@ func TestSelect_EmbedPostgres(t *testing.T) {
 				},
 			},
 			wantSQL: `SELECT "id", (SELECT COALESCE(json_agg(json_build_object(` +
-				`'id', "posts"."id", 'user_id', "posts"."user_id", 'title', "posts"."title")), '[]'::json) ` +
+				`'id', "posts"."id", 'user_id', "posts"."user_id", 'title', "posts"."title") ` +
+				`ORDER BY "posts"."id"), '[]'::json) ` +
 				`FROM "public"."posts" WHERE "posts"."user_id" = "users"."id") AS "posts" ` +
 				`FROM "public"."users" LIMIT 100 OFFSET 0`,
 		},
@@ -130,7 +131,8 @@ func TestSelect_EmbedPostgres(t *testing.T) {
 				},
 			},
 			wantSQL: `SELECT "id", (SELECT COALESCE(json_agg(json_build_object(` +
-				`'id', "posts"."id", 'user_id', "posts"."user_id", 'title', "posts"."title")), '[]'::json) ` +
+				`'id', "posts"."id", 'user_id', "posts"."user_id", 'title', "posts"."title") ` +
+				`ORDER BY "posts"."id"), '[]'::json) ` +
 				`FROM "public"."posts" WHERE "posts"."user_id" = "users"."id") AS "posts" ` +
 				`FROM "public"."users" LIMIT 100 OFFSET 0`,
 		},
