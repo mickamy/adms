@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"io"
 	"net/http"
@@ -12,15 +13,16 @@ import (
 // runtime cost. /healthz (with or without a trailing slash) stays open even
 // when auth is enabled so liveness probes do not need the token.
 //
-// The scheme match is case-insensitive per RFC 7235 §2.1. The token compare
-// is constant-time so a remote caller cannot distinguish "wrong length" from
-// "wrong bytes" by timing.
+// The scheme match is case-insensitive per RFC 7235 §2.1. Both presented and
+// expected tokens are SHA-256 hashed and the 32-byte digests are compared in
+// constant time, so neither the contents nor the length of the configured
+// token leak through response timing.
 func authBearer(out io.Writer, token string, next http.Handler) http.Handler {
 	if token == "" {
 		return next
 	}
 
-	expected := []byte(token)
+	expected := sha256.Sum256([]byte(token))
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isHealthzPath(r.URL.Path) {
@@ -39,7 +41,8 @@ func authBearer(out io.Writer, token string, next http.Handler) http.Handler {
 			return
 		}
 
-		if subtle.ConstantTimeCompare([]byte(got), expected) != 1 {
+		gotHash := sha256.Sum256([]byte(got))
+		if subtle.ConstantTimeCompare(gotHash[:], expected[:]) != 1 {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="adms", error="invalid_token"`)
 			writeProblem(w, r, out, http.StatusUnauthorized,
 				"unauthenticated", "Unauthenticated",
