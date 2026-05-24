@@ -47,7 +47,7 @@ func (l tableLookup) Table(name string) (*schema.Table, bool) {
 func New(cfg config.Config, db *sql.DB, logger io.Writer) (*Server, error) {
 	intro, err := cfg.Driver.Introspector()
 	if err != nil {
-		return nil, err //nolint:wrapcheck // Driver.Introspector returns a descriptive error already.
+		return nil, fmt.Errorf("server: %w", err)
 	}
 
 	return newServer(cfg, db, intro, logger)
@@ -82,7 +82,7 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 
 	dlc, err := cfg.Driver.Dialect()
 	if err != nil {
-		return nil, err //nolint:wrapcheck // Driver.Dialect returns a descriptive error already.
+		return nil, fmt.Errorf("server: %w", err)
 	}
 
 	if logger == nil {
