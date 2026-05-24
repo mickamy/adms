@@ -35,19 +35,19 @@ func TestPostgresIntrospect(t *testing.T) {
 	}
 
 	stmts := []string{
-		`DROP TABLE IF EXISTS posts, users CASCADE`,
-		`CREATE TABLE users (
+		`DROP TABLE IF EXISTS introspect_posts, introspect_users CASCADE`,
+		`CREATE TABLE introspect_users (
 			id BIGSERIAL PRIMARY KEY,
 			name TEXT NOT NULL,
 			email TEXT,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
-		`CREATE TABLE posts (
+		`CREATE TABLE introspect_posts (
 			id BIGSERIAL PRIMARY KEY,
-			user_id BIGINT NOT NULL REFERENCES users(id),
+			user_id BIGINT NOT NULL REFERENCES introspect_users(id),
 			title TEXT NOT NULL
 		)`,
-		`COMMENT ON COLUMN users.email IS 'optional email address'`,
+		`COMMENT ON COLUMN introspect_users.email IS 'optional email address'`,
 	}
 
 	for _, s := range stmts {
@@ -56,12 +56,16 @@ func TestPostgresIntrospect(t *testing.T) {
 		}
 	}
 
+	t.Cleanup(func() {
+		_, _ = conn.Exec(`DROP TABLE IF EXISTS introspect_posts, introspect_users CASCADE`)
+	})
+
 	got, err := schema.PostgresIntrospector().Introspect(ctx, conn, []string{"public"})
 	if err != nil {
 		t.Fatalf("introspect: %v", err)
 	}
 
-	users, posts := findTables(t, got)
+	users, posts := findTables(t, got, "introspect_users", "introspect_posts")
 
 	assertPK(t, "users", users.PrimaryKey, []string{"id"})
 	assertPK(t, "posts", posts.PrimaryKey, []string{"id"})
@@ -75,28 +79,28 @@ func TestPostgresIntrospect(t *testing.T) {
 		t.Errorf("users.email comment = %q, want %q", email.Comment, "optional email address")
 	}
 
-	assertFK(t, "posts → users", posts.ForeignKeys, "public.users", []string{"user_id"}, []string{"id"})
-	assertFK(t, "users ← posts", users.ReferencedBy, "public.posts", []string{"user_id"}, []string{"id"})
+	assertFK(t, "posts → users", posts.ForeignKeys, "public.introspect_users", []string{"user_id"}, []string{"id"})
+	assertFK(t, "users ← posts", users.ReferencedBy, "public.introspect_posts", []string{"user_id"}, []string{"id"})
 }
 
-func findTables(t *testing.T, s schema.Schema) (users, posts *schema.Table) {
+func findTables(t *testing.T, s schema.Schema, usersName, postsName string) (users, posts *schema.Table) {
 	t.Helper()
 
 	for i := range s.Tables {
 		switch s.Tables[i].Name {
-		case "users":
+		case usersName:
 			users = &s.Tables[i]
-		case "posts":
+		case postsName:
 			posts = &s.Tables[i]
 		}
 	}
 
 	if users == nil {
-		t.Fatal("users table not found")
+		t.Fatalf("table %q not found", usersName)
 	}
 
 	if posts == nil {
-		t.Fatal("posts table not found")
+		t.Fatalf("table %q not found", postsName)
 	}
 
 	return users, posts
