@@ -32,13 +32,22 @@ type Server struct {
 
 	schema     schema.Schema
 	schemaJSON []byte
-	tableIndex map[string]*schema.Table
+	tableIndex tableLookup
+}
+
+// tableLookup adapts the introspected table index to build.SchemaLookup so
+// the SQL builder can resolve embedded relations.
+type tableLookup map[string]*schema.Table
+
+func (l tableLookup) Table(name string) (*schema.Table, bool) {
+	t, ok := l[name]
+	return t, ok
 }
 
 func New(cfg config.Config, db *sql.DB, logger io.Writer) (*Server, error) {
 	intro, err := cfg.Driver.Introspector()
 	if err != nil {
-		return nil, err //nolint:wrapcheck // Driver.Introspector returns a descriptive error already.
+		return nil, fmt.Errorf("server: %w", err)
 	}
 
 	return newServer(cfg, db, intro, logger)
@@ -73,7 +82,7 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 
 	dlc, err := cfg.Driver.Dialect()
 	if err != nil {
-		return nil, err //nolint:wrapcheck // Driver.Dialect returns a descriptive error already.
+		return nil, fmt.Errorf("server: %w", err)
 	}
 
 	if logger == nil {
@@ -203,8 +212,8 @@ func (s *Server) prepare(ctx context.Context) error {
 // table names across schemas yield an error rather than a silent overwrite,
 // so the caller can either narrow allowed_schemas/allowed_tables or extend
 // the routing scheme to disambiguate.
-func indexTables(tables []schema.Table) (map[string]*schema.Table, error) {
-	idx := make(map[string]*schema.Table, len(tables))
+func indexTables(tables []schema.Table) (tableLookup, error) {
+	idx := make(tableLookup, len(tables))
 
 	for i := range tables {
 		t := &tables[i]

@@ -7,4 +7,15 @@ type Dialect interface {
 	SupportsILIKE() bool
 	SupportsReturning() bool
 	JSONAgg(expr, orderBy string) string
+	// JSONObject formats a JSON object literal from alternating key / value
+	// expressions: pairs[0] is the first key, pairs[1] is its expression, and
+	// so on. Keys must already be quoted as SQL literals (e.g., 'id').
+	JSONObject(pairs []string) string
+	// EmptyJSONArray returns a SQL expression equivalent to an empty JSON
+	// array, used as a fallback when an aggregated subquery has no rows.
+	EmptyJSONArray() string
+	// StringLiteral renders s as a single-quoted SQL string literal with
+	// engine-appropriate escaping (e.g., MySQL also escapes backslashes when
+	// NO_BACKSLASH_ESCAPES is off, which is the default).
+	StringLiteral(s string) string
 }

@@ -183,7 +183,7 @@ func TestSelect_Postgres(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			sql, args, err := build.Select(tt.q, table, d, 100, 1000)
+			sql, args, _, err := build.Select(tt.q, table, nil, d, 100, 1000)
 			if err != nil {
 				t.Fatalf("Select: %v", err)
 			}
@@ -246,7 +246,7 @@ func TestSelect_MySQL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			sql, args, err := build.Select(tt.q, table, d, 100, 1000)
+			sql, args, _, err := build.Select(tt.q, table, nil, d, 100, 1000)
 			if err != nil {
 				t.Fatalf("Select: %v", err)
 			}
@@ -270,7 +270,7 @@ func TestSelect_TableWithoutSchema(t *testing.T) {
 		Columns: []schema.Column{{Name: "id"}},
 	}
 
-	sql, _, err := build.Select(query.Query{}, table, dialect.Postgres(), 100, 1000)
+	sql, _, _, err := build.Select(query.Query{}, table, nil, dialect.Postgres(), 100, 1000)
 	if err != nil {
 		t.Fatalf("Select: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestSelect_RejectsInvalidLimits(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, _, err := build.Select(query.Query{}, table, d, tt.defaultLimit, tt.maxLimit)
+			_, _, _, err := build.Select(query.Query{}, table, nil, d, tt.defaultLimit, tt.maxLimit)
 			if err == nil {
 				t.Errorf("Select: expected error, got nil")
 			}
@@ -381,7 +381,7 @@ func TestSelect_Errors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, _, err := build.Select(tt.q, table, d, 100, 1000)
+			_, _, _, err := build.Select(tt.q, table, nil, d, 100, 1000)
 			if err == nil {
 				t.Errorf("Select: expected error, got nil")
 			}

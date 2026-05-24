@@ -30,3 +30,21 @@ func (mysqlDialect) SupportsReturning() bool { return false }
 func (mysqlDialect) JSONAgg(expr, _ string) string {
 	return fmt.Sprintf("JSON_ARRAYAGG(%s)", expr)
 }
+
+func (mysqlDialect) JSONObject(pairs []string) string {
+	return fmt.Sprintf("JSON_OBJECT(%s)", strings.Join(pairs, ", "))
+}
+
+func (mysqlDialect) EmptyJSONArray() string {
+	return "JSON_ARRAY()"
+}
+
+// StringLiteral escapes both backslashes and single quotes. MySQL treats a
+// backslash as an escape character by default (NO_BACKSLASH_ESCAPES off), so
+// emitting "\'" inside a literal would otherwise be parsed as an escaped
+// quote and break the surrounding statement.
+func (mysqlDialect) StringLiteral(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "'", "''")
+	return "'" + s + "'"
+}

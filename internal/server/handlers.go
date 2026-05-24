@@ -44,7 +44,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stmt, args, err := build.Select(q, table, s.dialect, s.defaultLimit, s.maxLimit)
+	stmt, args, embedAliases, err := build.Select(q, table, s.tableIndex, s.dialect, s.defaultLimit, s.maxLimit)
 	if err != nil {
 		writeProblem(w, r, s.logger, http.StatusBadRequest,
 			"invalid-query", "Invalid query", err.Error())
@@ -67,7 +67,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	result, err := rowsToJSON(rows)
+	result, err := rowsToJSON(rows, embedAliases)
 	if err != nil {
 		fmt.Fprintf(s.logger, "adms: encode rows %s %s: %v\n", r.Method, r.URL.EscapedPath(), err)
 		writeProblem(w, r, s.logger, http.StatusInternalServerError,
@@ -83,15 +83,18 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
+func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error) {
 	cols, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("columns: %w", err)
 	}
 
-	// Allocate scan buffers once. rows.Scan overwrites values[i] each iteration
-	// and ptrs[i] keeps pointing at the same slot, so there is nothing to reset
-	// between rows.
+	embedSet := make(map[string]struct{}, len(embedAliases))
+	for _, a := range embedAliases {
+		embedSet[a] = struct{}{}
+	}
+
+	// Reuse scan buffers across rows: rows.Scan overwrites values[i] in place.
 	values := make([]any, len(cols))
 	ptrs := make([]any, len(cols))
 
@@ -108,6 +111,11 @@ func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
 
 		row := make(map[string]any, len(cols))
 		for i, col := range cols {
+			if _, isEmbed := embedSet[col]; isEmbed {
+				row[col] = decodeEmbedValue(values[i])
+				continue
+			}
+
 			row[col] = normalizeScanValue(values[i])
 		}
 
@@ -121,17 +129,40 @@ func rowsToJSON(rows *sql.Rows) ([]map[string]any, error) {
 	return result, nil
 }
 
-// normalizeScanValue makes driver-returned values JSON-friendly. The MySQL
-// driver returns text-typed columns as []byte; we convert valid UTF-8 byte
-// slices to string so encoding/json emits a normal JSON string. Non-UTF-8
-// payloads (binary / blob columns) are passed through as []byte so JSON
-// encoding produces a safe base64 representation rather than corrupting the
-// bytes by force-casting to string.
-//
-// database/sql guarantees the scanned []byte is only valid until the next
-// Scan call, so non-UTF-8 payloads are defensively copied. The UTF-8 branch
-// is safe without an explicit copy because Go's string conversion already
-// allocates a fresh backing array.
+// decodeEmbedValue wraps the embed payload in a json.RawMessage so the
+// row's JSON encoder emits the nested object/array verbatim. Decoding into
+// `any` would coerce BIGINTs to float64 and silently lose precision.
+func decodeEmbedValue(v any) any {
+	if v == nil {
+		return nil
+	}
+
+	var src []byte
+	switch x := v.(type) {
+	case []byte:
+		src = x
+	case string:
+		src = []byte(x)
+	default:
+		return v
+	}
+
+	if len(src) == 0 {
+		return nil
+	}
+
+	// database/sql reuses scan buffers across iterations, so copy before
+	// retaining.
+	raw := make([]byte, len(src))
+	copy(raw, src)
+
+	return json.RawMessage(raw)
+}
+
+// normalizeScanValue turns driver []byte (e.g., MySQL text columns) into a
+// JSON-friendly value: UTF-8 valid → string (a fresh allocation), otherwise
+// a copied []byte so encoding/json emits a safe base64 form and the scan
+// buffer reuse does not corrupt it.
 func normalizeScanValue(v any) any {
 	if b, ok := v.([]byte); ok {
 		if utf8.Valid(b) {

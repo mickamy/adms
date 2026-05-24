@@ -88,3 +88,52 @@ func TestPostgresJSONAgg(t *testing.T) {
 		t.Errorf("JSONAgg(x, y ASC) = %q, want %q", got, want)
 	}
 }
+
+func TestPostgresJSONObject(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+
+	if got, want := d.JSONObject(nil), "json_build_object()"; got != want {
+		t.Errorf("JSONObject(nil) = %q, want %q", got, want)
+	}
+
+	got := d.JSONObject([]string{"'id'", `"u"."id"`, "'name'", `"u"."name"`})
+	want := `json_build_object('id', "u"."id", 'name', "u"."name")`
+	if got != want {
+		t.Errorf("JSONObject(...) = %q, want %q", got, want)
+	}
+}
+
+func TestPostgresEmptyJSONArray(t *testing.T) {
+	t.Parallel()
+
+	if got, want := dialect.Postgres().EmptyJSONArray(), "'[]'::json"; got != want {
+		t.Errorf("EmptyJSONArray() = %q, want %q", got, want)
+	}
+}
+
+func TestPostgresStringLiteral(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+
+	tests := []struct {
+		in, want string
+	}{
+		{"id", "'id'"},
+		{"o'brien", "'o''brien'"},
+		{`a\b`, `'a\b'`},
+		{``, `''`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+
+			if got := d.StringLiteral(tt.in); got != tt.want {
+				t.Errorf("StringLiteral(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

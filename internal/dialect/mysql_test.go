@@ -75,3 +75,53 @@ func TestMySQLJSONAgg(t *testing.T) {
 		t.Errorf("JSONAgg(x, y ASC) = %q, want %q", got, want)
 	}
 }
+
+func TestMySQLJSONObject(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.MySQL()
+
+	if got, want := d.JSONObject(nil), "JSON_OBJECT()"; got != want {
+		t.Errorf("JSONObject(nil) = %q, want %q", got, want)
+	}
+
+	got := d.JSONObject([]string{"'id'", "`u`.`id`", "'name'", "`u`.`name`"})
+	want := "JSON_OBJECT('id', `u`.`id`, 'name', `u`.`name`)"
+	if got != want {
+		t.Errorf("JSONObject(...) = %q, want %q", got, want)
+	}
+}
+
+func TestMySQLEmptyJSONArray(t *testing.T) {
+	t.Parallel()
+
+	if got, want := dialect.MySQL().EmptyJSONArray(), "JSON_ARRAY()"; got != want {
+		t.Errorf("EmptyJSONArray() = %q, want %q", got, want)
+	}
+}
+
+func TestMySQLStringLiteral(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.MySQL()
+
+	tests := []struct {
+		name, in, want string
+	}{
+		{"plain", "id", "'id'"},
+		{"single quote doubled", "o'brien", "'o''brien'"},
+		{"backslash doubled", `a\b`, `'a\\b'`},
+		{"backslash before quote", `a\'b`, `'a\\''b'`},
+		{"empty", "", "''"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := d.StringLiteral(tt.in); got != tt.want {
+				t.Errorf("StringLiteral(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
