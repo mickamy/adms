@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -115,11 +114,7 @@ func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error)
 		row := make(map[string]any, len(cols))
 		for i, col := range cols {
 			if _, isEmbed := embedSet[col]; isEmbed {
-				decoded, err := decodeEmbedValue(values[i])
-				if err != nil {
-					return nil, fmt.Errorf("decode embed %q: %w", col, err)
-				}
-				row[col] = decoded
+				row[col] = decodeEmbedValue(values[i])
 				continue
 			}
 
@@ -142,9 +137,13 @@ func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error)
 // round-trip through `any` (float64) would corrupt, and skips a redundant
 // parse + re-encode pass. SQL NULL and empty payloads collapse to Go nil,
 // which encoding/json then writes as JSON null.
-func decodeEmbedValue(v any) (any, error) {
+//
+// The payload itself is trusted to be well-formed JSON because the SQL
+// builder emits it via json_build_object / JSON_OBJECT — re-validating per
+// row would just scan the same bytes twice for no gain.
+func decodeEmbedValue(v any) any {
 	if v == nil {
-		return nil, nil //nolint:nilnil // SQL NULL → JSON null
+		return nil
 	}
 
 	var src []byte
@@ -154,15 +153,11 @@ func decodeEmbedValue(v any) (any, error) {
 	case string:
 		src = []byte(x)
 	default:
-		return v, nil
+		return v
 	}
 
 	if len(src) == 0 {
-		return nil, nil //nolint:nilnil // empty embed payload → JSON null
-	}
-
-	if !json.Valid(src) {
-		return nil, errors.New("embed payload is not valid JSON")
+		return nil
 	}
 
 	// database/sql reuses the underlying scan buffer between iterations,
@@ -170,7 +165,7 @@ func decodeEmbedValue(v any) (any, error) {
 	raw := make([]byte, len(src))
 	copy(raw, src)
 
-	return json.RawMessage(raw), nil
+	return json.RawMessage(raw)
 }
 
 // normalizeScanValue makes driver-returned values JSON-friendly. The MySQL
