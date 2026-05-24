@@ -195,25 +195,39 @@ func TestAuthBearer_RejectsWrongScheme(t *testing.T) {
 func TestAuthBearer_HealthzBypassesAuth(t *testing.T) {
 	t.Parallel()
 
-	var called atomic.Bool
-	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		called.Store(true)
-
-		_, _ = io.WriteString(w, "ok")
-	})
-
-	ts := httptest.NewServer(server.AuthBearer(io.Discard, "s3cret", next))
-	t.Cleanup(ts.Close)
-
-	resp := httpGet(t, ts.URL+"/healthz") // no Authorization header
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200 (/healthz must bypass auth)", resp.StatusCode)
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"without trailing slash", "/healthz"},
+		{"with trailing slash", "/healthz/"},
 	}
 
-	if !called.Load() {
-		t.Error("/healthz did not reach the next handler")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var called atomic.Bool
+			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				called.Store(true)
+
+				_, _ = io.WriteString(w, "ok")
+			})
+
+			ts := httptest.NewServer(server.AuthBearer(io.Discard, "s3cret", next))
+			t.Cleanup(ts.Close)
+
+			resp := httpGet(t, ts.URL+tc.path) // no Authorization header
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("status = %d, want 200 (%s must bypass auth)", resp.StatusCode, tc.path)
+			}
+
+			if !called.Load() {
+				t.Errorf("%s did not reach the next handler", tc.path)
+			}
+		})
 	}
 }
 

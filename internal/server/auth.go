@@ -9,8 +9,8 @@ import (
 
 // authBearer enforces an HTTP Bearer authentication scheme. When token is
 // empty, it returns next unchanged so configurations without auth pay no
-// runtime cost. /healthz stays open even when auth is enabled so liveness
-// probes do not need the token.
+// runtime cost. /healthz (with or without a trailing slash) stays open even
+// when auth is enabled so liveness probes do not need the token.
 //
 // The scheme match is case-insensitive per RFC 7235 §2.1. The token compare
 // is constant-time so a remote caller cannot distinguish "wrong length" from
@@ -23,7 +23,7 @@ func authBearer(out io.Writer, token string, next http.Handler) http.Handler {
 	expected := []byte(token)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if isHealthzPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 
 			return
@@ -50,6 +50,13 @@ func authBearer(out io.Writer, token string, next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isHealthzPath returns true for /healthz and /healthz/ (the only liveness-
+// probe path adms exposes). Other trailing-slash variants like /healthz//
+// stay in the auth path so we are not lenient beyond a single trailing slash.
+func isHealthzPath(p string) bool {
+	return p == "/healthz" || p == "/healthz/"
 }
 
 // bearerToken extracts the credentials from an Authorization header value of
