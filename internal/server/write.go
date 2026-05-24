@@ -33,15 +33,16 @@ type preferDirective struct {
 	CountExact bool
 }
 
-// parsePrefer decodes the PostgREST-style Prefer header. Unknown tokens are
-// ignored so the request still succeeds — the directive structure tracks
-// only the subset adms acts on.
+// parsePrefer decodes the PostgREST-style Prefer header. Per RFC 7240 the
+// preference tokens are case-insensitive, so each directive is lowercased
+// before matching. Unknown tokens are ignored so the request still
+// succeeds; the directive structure tracks only the subset adms acts on.
 func parsePrefer(h http.Header) preferDirective {
 	p := preferDirective{Return: preferReturnMinimal}
 
 	for _, v := range h.Values("Prefer") {
 		for item := range strings.SplitSeq(v, ",") {
-			switch strings.TrimSpace(item) {
+			switch strings.ToLower(strings.TrimSpace(item)) {
 			case "return=representation":
 				p.Return = preferReturnRepresentation
 			case "return=minimal":
@@ -98,7 +99,8 @@ func (s *Server) insert(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
 	defer cancel()
 
-	s.executeWrite(ctx, w, r, stmt, args, wantRet, pref.CountExact, http.StatusCreated)
+	s.executeWrite(ctx, w, r, stmt, args, wantRet, pref.CountExact,
+		http.StatusCreated, http.StatusCreated)
 }
 
 func (s *Server) update(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +158,8 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
 	defer cancel()
 
-	s.executeWrite(ctx, w, r, stmt, args, wantRet, pref.CountExact, http.StatusOK)
+	s.executeWrite(ctx, w, r, stmt, args, wantRet, pref.CountExact,
+		http.StatusOK, http.StatusNoContent)
 }
 
 func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +199,8 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
 	defer cancel()
 
-	s.executeWrite(ctx, w, r, stmt, args, wantRet, pref.CountExact, http.StatusOK)
+	s.executeWrite(ctx, w, r, stmt, args, wantRet, pref.CountExact,
+		http.StatusOK, http.StatusNoContent)
 }
 
 func (s *Server) resolveWriteTarget(w http.ResponseWriter, r *http.Request) (*schema.Table, bool) {
@@ -363,10 +367,16 @@ func decodeJSONWithNumber(body []byte, target any) error {
 	return nil
 }
 
-// executeWrite runs the statement and writes the response. When wantRet is
-// true the response body is the JSON array of rows; otherwise the response
-// is a status-only ack (201 for POST, 204 for PATCH/DELETE) and the affected
-// row count rides Content-Range when count=exact was requested.
+// executeWrite runs the statement and writes the response. The two status
+// arguments separate the response codes for the two branches: representation
+// (success body) and minimal (no body). PostgREST conventions:
+//
+//	POST   → representation 201, minimal 201
+//	PATCH  → representation 200, minimal 204
+//	DELETE → representation 200, minimal 204
+//
+// Splitting the two avoids overloading a single "createdStatus" value as
+// both a success code and a marker for the POST → 201 minimal case.
 func (s *Server) executeWrite(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -375,7 +385,8 @@ func (s *Server) executeWrite(
 	args []any,
 	wantRet bool,
 	countExact bool,
-	createdStatus int,
+	representationStatus int,
+	minimalStatus int,
 ) {
 	if wantRet {
 		// stmt is constructed by build.* with identifiers validated against the
@@ -397,7 +408,7 @@ func (s *Server) executeWrite(
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Range", contentRangeReturned(len(result)))
-		w.WriteHeader(createdStatus)
+		w.WriteHeader(representationStatus)
 
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			fmt.Fprintf(s.logger, "adms: encode rows %s %s: %v\n",
@@ -420,14 +431,7 @@ func (s *Server) executeWrite(
 		}
 	}
 
-	// PostgREST: POST → 201, PATCH/DELETE → 204 No Content for return=minimal.
-	if createdStatus == http.StatusCreated {
-		w.WriteHeader(http.StatusCreated)
-
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(minimalStatus)
 }
 
 func contentRangeReturned(n int) string {

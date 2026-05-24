@@ -110,6 +110,11 @@ func TestParsePrefer(t *testing.T) {
 			[]string{"resolution=merge-duplicates"},
 			server.PreferDirective{Return: server.PreferReturnMinimal},
 		},
+		{
+			"directive matching is case-insensitive (RFC 7240)",
+			[]string{"Return=Representation, COUNT=EXACT"},
+			server.PreferDirective{Return: server.PreferReturnRepresentation, CountExact: true},
+		},
 	}
 
 	for _, tt := range tests {
