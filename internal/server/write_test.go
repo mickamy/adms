@@ -634,6 +634,52 @@ func TestParseInsertBody_PreservesNumberPrecision(t *testing.T) {
 	}
 }
 
+func TestParseInsertBody_RejectsTrailingData(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"trailing junk after object", `{"id":1} junk`},
+		{"trailing JSON value after object", `{"id":1} {"id":2}`},
+		{"trailing junk after array", `[{"id":1}] junk`},
+		{"trailing JSON value after array", `[{"id":1}] {"id":2}`},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := server.ParseInsertBody([]byte(tt.body)); err == nil {
+				t.Errorf("expected error for %q, got nil", tt.body)
+			}
+		})
+	}
+}
+
+func TestParseUpdateBody_RejectsTrailingData(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"trailing junk", `{"name":"alice"} junk`},
+		{"trailing JSON value", `{"name":"alice"} {"name":"bob"}`},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := server.ParseUpdateBody([]byte(tt.body)); err == nil {
+				t.Errorf("expected error for %q, got nil", tt.body)
+			}
+		})
+	}
+}
+
 func TestParseUpdateBody_PreservesNumberPrecision(t *testing.T) {
 	t.Parallel()
 

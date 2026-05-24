@@ -334,14 +334,20 @@ func parseUpdateBody(body []byte) (map[string]any, error) {
 }
 
 // decodeJSONWithNumber decodes body into target with UseNumber() set so JSON
-// numbers materialize as json.Number instead of float64. See parseInsertBody
-// for the precision rationale.
+// numbers materialize as json.Number instead of float64 (see parseInsertBody
+// for the precision rationale). After the first value is consumed, any
+// remaining non-whitespace content is rejected so trailing data like
+// `{"a":1} junk` or `{"a":1}{"b":2}` cannot slip past the handler.
 func decodeJSONWithNumber(body []byte, target any) error {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
 
 	if err := dec.Decode(target); err != nil {
 		return fmt.Errorf("decode: %w", err)
+	}
+
+	if dec.More() {
+		return errors.New("decode: unexpected data after JSON value")
 	}
 
 	return nil
