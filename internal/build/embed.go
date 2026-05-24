@@ -97,13 +97,6 @@ func qualifiedTableName(t *schema.Table) string {
 	return t.Schema + "." + t.Name
 }
 
-// sqlStringLiteral renders s as a single-quoted SQL string literal with
-// embedded single quotes doubled per the SQL standard. Used for JSON keys
-// emitted into the SELECT list.
-func sqlStringLiteral(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
-
 // buildEmbedSubquery emits the SELECT alias clause for an embedded relation.
 // One-to-many produces a JSON-aggregated correlated subquery; many-to-one
 // produces a JSON_OBJECT subquery with LIMIT 1. Nested embeds are rejected.
@@ -143,7 +136,7 @@ func buildEmbedSubquery(
 
 	pairs := make([]string, 0, len(fieldNames)*2)
 	for _, name := range fieldNames {
-		pairs = append(pairs, sqlStringLiteral(name))
+		pairs = append(pairs, d.StringLiteral(name))
 		pairs = append(pairs, childTableQuoted+"."+d.Quote(name))
 	}
 

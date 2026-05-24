@@ -14,4 +14,8 @@ type Dialect interface {
 	// EmptyJSONArray returns a SQL expression equivalent to an empty JSON
 	// array, used as a fallback when an aggregated subquery has no rows.
 	EmptyJSONArray() string
+	// StringLiteral renders s as a single-quoted SQL string literal with
+	// engine-appropriate escaping (e.g., MySQL also escapes backslashes when
+	// NO_BACKSLASH_ESCAPES is off, which is the default).
+	StringLiteral(s string) string
 }

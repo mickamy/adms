@@ -38,3 +38,10 @@ func (postgresDialect) JSONObject(pairs []string) string {
 func (postgresDialect) EmptyJSONArray() string {
 	return "'[]'::json"
 }
+
+// StringLiteral assumes standard_conforming_strings is on (the default since
+// PostgreSQL 9.1), so backslashes are literal and only single quotes need to
+// be doubled.
+func (postgresDialect) StringLiteral(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}

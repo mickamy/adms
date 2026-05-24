@@ -99,3 +99,29 @@ func TestMySQLEmptyJSONArray(t *testing.T) {
 		t.Errorf("EmptyJSONArray() = %q, want %q", got, want)
 	}
 }
+
+func TestMySQLStringLiteral(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.MySQL()
+
+	tests := []struct {
+		name, in, want string
+	}{
+		{"plain", "id", "'id'"},
+		{"single quote doubled", "o'brien", "'o''brien'"},
+		{"backslash doubled", `a\b`, `'a\\b'`},
+		{"backslash before quote", `a\'b`, `'a\\''b'`},
+		{"empty", "", "''"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := d.StringLiteral(tt.in); got != tt.want {
+				t.Errorf("StringLiteral(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

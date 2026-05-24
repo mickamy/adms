@@ -112,3 +112,28 @@ func TestPostgresEmptyJSONArray(t *testing.T) {
 		t.Errorf("EmptyJSONArray() = %q, want %q", got, want)
 	}
 }
+
+func TestPostgresStringLiteral(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+
+	tests := []struct {
+		in, want string
+	}{
+		{"id", "'id'"},
+		{"o'brien", "'o''brien'"},
+		{`a\b`, `'a\b'`},
+		{``, `''`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+
+			if got := d.StringLiteral(tt.in); got != tt.want {
+				t.Errorf("StringLiteral(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
