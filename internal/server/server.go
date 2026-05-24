@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"time"
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/dialect"
+	"github.com/mickamy/adms/internal/logger"
 	"github.com/mickamy/adms/internal/schema"
 )
 
@@ -32,7 +32,6 @@ type Server struct {
 	authToken      string
 	corsOrigins    []string
 	timeout        time.Duration
-	logger         io.Writer
 
 	schema     schema.Schema
 	schemaJSON []byte
@@ -48,16 +47,16 @@ func (l tableLookup) Table(name string) (*schema.Table, bool) {
 	return t, ok
 }
 
-func New(cfg config.Config, db *sql.DB, logger io.Writer) (*Server, error) {
+func New(cfg config.Config, db *sql.DB) (*Server, error) {
 	intro, err := cfg.Driver.Introspector()
 	if err != nil {
 		return nil, fmt.Errorf("server: %w", err)
 	}
 
-	return newServer(cfg, db, intro, logger)
+	return newServer(cfg, db, intro)
 }
 
-func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger io.Writer) (*Server, error) {
+func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Server, error) {
 	if intro == nil {
 		return nil, errors.New("server: introspector is required")
 	}
@@ -94,10 +93,6 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		return nil, fmt.Errorf("server: %w", err)
 	}
 
-	if logger == nil {
-		logger = io.Discard
-	}
-
 	return &Server{
 		addr:           cfg.Listen,
 		db:             db,
@@ -112,7 +107,6 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		authToken:      cfg.AuthToken,
 		corsOrigins:    cfg.CORSOrigins,
 		timeout:        cfg.Timeout,
-		logger:         logger,
 	}, nil
 }
 
@@ -132,7 +126,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) serve(ctx context.Context, ln net.Listener) error {
-	fmt.Fprintf(s.logger, "adms: listening on %s\n", ln.Addr())
+	logger.Info(ctx, "listening", "addr", ln.Addr().String())
 
 	srv := &http.Server{
 		Handler:           s.routes(),
@@ -158,7 +152,7 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		fmt.Fprintln(s.logger, "adms: shutting down")
+		logger.Info(ctx, "shutting down")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()

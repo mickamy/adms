@@ -95,8 +95,7 @@ func TestRun_PreConnectionErrors(t *testing.T) {
 			wantStderr: `unknown driver "sqlite"`,
 		},
 		{
-			// Env name is unique to this test so the parallel runner cannot race
-			// with another test that happens to set the same variable.
+			// Env name is unique to this test so parallel runs cannot race on it.
 			name: "auth_token_env points to unset variable",
 			args: func(t *testing.T) []string {
 				p := filepath.Join(t.TempDir(), "adms.yaml")
@@ -134,11 +133,8 @@ func TestRun_PreConnectionErrors(t *testing.T) {
 func TestRun_ResolvesAuthTokenFromEnv(t *testing.T) {
 	const envName = "ADMS_AUTH_TOKEN_RESOLVED_IN_CLI_TEST"
 
-	// Exercise both branches of resolveAuthToken that follow a successful
-	// config.Load: the no-op path (auth_token_env unset) and the success path
-	// (env var set, token populated). Each case uses a DSN pointing at a
-	// closed TCP port so pingDB fails fast and the run returns exit.Error
-	// without us needing a real database.
+	// DSN points to a closed TCP port so pingDB fails fast (exit.Error)
+	// after resolveAuthToken runs, without needing a real database.
 	cases := []struct {
 		name             string
 		authTokenEnvLine string

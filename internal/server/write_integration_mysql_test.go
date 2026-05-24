@@ -77,7 +77,6 @@ func writeFixtureMySQL(t *testing.T, fn func(ctx testCtx)) {
 			AllowedTables: []string{tableName},
 		},
 		db,
-		io.Discard,
 	)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)

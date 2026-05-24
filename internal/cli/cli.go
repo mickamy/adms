@@ -14,6 +14,7 @@ import (
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
 	"github.com/mickamy/adms/internal/exit"
+	"github.com/mickamy/adms/internal/logger"
 	"github.com/mickamy/adms/internal/server"
 )
 
@@ -39,6 +40,8 @@ func Run(args []string, _, stderr io.Writer) int {
 		return exit.Usage
 	}
 
+	logger.Init(stderr, cfg.LogLevel)
+
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -56,7 +59,7 @@ func Run(args []string, _, stderr io.Writer) int {
 		return exit.Error
 	}
 
-	srv, err := server.New(cfg, db.DB, stderr)
+	srv, err := server.New(cfg, db.DB)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
@@ -117,10 +120,8 @@ func resolveConfigPath(args []string) (string, error) {
 	}
 }
 
-// resolveAuthToken reads the env var named by AuthTokenEnv into AuthToken.
-// An unset or empty env value is a startup error rather than a silent
-// "auth disabled" so the operator who opted in cannot end up serving an
-// open API by accident.
+// resolveAuthToken fails fast if AuthTokenEnv is set but unresolved, so
+// opting into auth cannot silently serve an open API.
 func resolveAuthToken(cfg *config.Config) error {
 	if cfg.AuthTokenEnv == "" {
 		return nil

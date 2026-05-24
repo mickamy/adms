@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +15,7 @@ func TestWriteProblem(t *testing.T) {
 	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/users?id=eq.1", nil)
 	rec := httptest.NewRecorder()
 
-	server.WriteProblem(rec, r, io.Discard, http.StatusBadRequest,
+	server.WriteProblem(rec, r, http.StatusBadRequest,
 		"unknown-column", "Unknown column", `column "foo" does not exist`)
 
 	res := rec.Result()

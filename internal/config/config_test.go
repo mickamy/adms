@@ -365,6 +365,29 @@ max_body_bytes: 0`,
 			wantErr: "max_body_bytes",
 		},
 		{
+			name:     "log_level upper case is normalized",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+log_level: WARN`,
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      "x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: "warn",
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+			},
+		},
+		{
+			name:     "unknown log_level rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+log_level: verbose`,
+			wantErr: `invalid log_level "verbose"`,
+		},
+		{
 			name:     "whitespace around scalar string fields is normalized",
 			filename: "adms.yaml",
 			body: `driver: "  postgres  "

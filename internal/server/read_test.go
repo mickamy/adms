@@ -30,7 +30,7 @@ func usersSchema() schema.Schema {
 func TestRead_UnknownTableReturnsProblem(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, schema.Schema{})
+	ts := newTestServer(t, schema.Schema{})
 
 	resp := httpGet(t, ts.URL+"/ghost")
 	defer func() { _ = resp.Body.Close() }()
@@ -64,7 +64,7 @@ func TestRead_UnknownTableReturnsProblem(t *testing.T) {
 func TestRead_InvalidQueryReturnsProblem(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpGet(t, ts.URL+"/users?id=bogus.42")
 	defer func() { _ = resp.Body.Close() }()
@@ -90,7 +90,7 @@ func TestRead_InvalidQueryReturnsProblem(t *testing.T) {
 func TestRead_UnknownColumnReturnsProblem(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpGet(t, ts.URL+"/users?ghost=eq.1")
 	defer func() { _ = resp.Body.Close() }()

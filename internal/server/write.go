@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mickamy/adms/internal/build"
+	"github.com/mickamy/adms/internal/logger"
 	"github.com/mickamy/adms/internal/query"
 	"github.com/mickamy/adms/internal/schema"
 )
@@ -79,7 +80,7 @@ func (s *Server) insert(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := parseInsertBody(body)
 	if err != nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-body", "Invalid body", err.Error())
 
 		return
@@ -87,7 +88,7 @@ func (s *Server) insert(w http.ResponseWriter, r *http.Request) {
 
 	stmt, args, err := build.Insert(table, rows, s.dialect, wantRet)
 	if err != nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-body", "Invalid body", err.Error())
 
 		return
@@ -119,7 +120,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if q.Filter == nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"unfiltered-write", "Unfiltered write",
 			"PATCH requires at least one filter to avoid updating every row")
 
@@ -133,7 +134,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 
 	set, err := parseUpdateBody(body)
 	if err != nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-body", "Invalid body", err.Error())
 
 		return
@@ -146,7 +147,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 			typeSuffix, title = "invalid-query", "Invalid query"
 		}
 
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			typeSuffix, title, err.Error())
 
 		return
@@ -178,7 +179,7 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if q.Filter == nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"unfiltered-write", "Unfiltered write",
 			"DELETE requires at least one filter to avoid removing every row")
 
@@ -192,7 +193,7 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 			typeSuffix, title = "invalid-query", "Invalid query"
 		}
 
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			typeSuffix, title, err.Error())
 
 		return
@@ -207,7 +208,7 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) resolveWriteTarget(w http.ResponseWriter, r *http.Request) (*schema.Table, bool) {
 	if s.readOnly {
-		writeProblem(w, r, s.logger, http.StatusForbidden,
+		writeProblem(w, r, http.StatusForbidden,
 			"read-only", "Read-only",
 			"this server is running in read-only mode")
 
@@ -218,7 +219,7 @@ func (s *Server) resolveWriteTarget(w http.ResponseWriter, r *http.Request) (*sc
 
 	t, ok := s.tableIndex[name]
 	if !ok {
-		writeProblem(w, r, s.logger, http.StatusNotFound,
+		writeProblem(w, r, http.StatusNotFound,
 			"unknown-table", "Unknown table",
 			fmt.Sprintf("table %q is not exposed by this server", name))
 
@@ -231,7 +232,7 @@ func (s *Server) resolveWriteTarget(w http.ResponseWriter, r *http.Request) (*sc
 func (s *Server) parseFilter(w http.ResponseWriter, r *http.Request) (query.Query, bool) {
 	q, err := query.Parse(r.URL.Query())
 	if err != nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-query", "Invalid query", err.Error())
 
 		return query.Query{}, false
@@ -244,21 +245,21 @@ func (s *Server) readJSONBody(w http.ResponseWriter, r *http.Request) ([]byte, b
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.maxBodyBytes))
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			writeProblem(w, r, s.logger, http.StatusRequestEntityTooLarge,
+			writeProblem(w, r, http.StatusRequestEntityTooLarge,
 				"body-too-large", "Body too large",
 				fmt.Sprintf("request body exceeded %d bytes", s.maxBodyBytes))
 
 			return nil, false
 		}
 
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-body", "Invalid body", "failed to read request body")
 
 		return nil, false
 	}
 
 	if len(bytes.TrimSpace(body)) == 0 {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-body", "Invalid body", "request body is empty")
 
 		return nil, false
@@ -275,7 +276,7 @@ func (s *Server) requireReturningSupport(w http.ResponseWriter, r *http.Request,
 		return true
 	}
 
-	writeProblem(w, r, s.logger, http.StatusNotImplemented,
+	writeProblem(w, r, http.StatusNotImplemented,
 		"unsupported", "Unsupported feature",
 		fmt.Sprintf("dialect %q does not support return=representation on %s yet",
 			s.dialect.Name(), op))
@@ -413,8 +414,8 @@ func (s *Server) executeWrite(
 		w.WriteHeader(representationStatus)
 
 		if err := json.NewEncoder(w).Encode(result); err != nil {
-			fmt.Fprintf(s.logger, "adms: encode rows %s %s: %v\n",
-				r.Method, r.URL.EscapedPath(), err)
+			logger.Error(ctx, "encode response",
+				"method", r.Method, "path", r.URL.EscapedPath(), "err", err.Error())
 		}
 
 		return
@@ -445,11 +446,11 @@ func contentRangeReturned(n int) string {
 }
 
 func (s *Server) writeDBError(w http.ResponseWriter, r *http.Request, err error, action string) {
-	fmt.Fprintf(s.logger, "adms: %s %s %s: %v\n",
-		action, r.Method, r.URL.EscapedPath(), err)
+	logger.Error(r.Context(), action,
+		"method", r.Method, "path", r.URL.EscapedPath(), "err", err.Error())
 
 	status, typeSuffix, title, detail := classifyDBError(err)
-	writeProblem(w, r, s.logger, status, typeSuffix, title, detail)
+	writeProblem(w, r, status, typeSuffix, title, detail)
 }
 
 // classifyDBError maps driver-typed errors to HTTP responses. Unique /

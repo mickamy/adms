@@ -74,7 +74,6 @@ func TestReadHandlerPostgres_Success(t *testing.T) {
 			AllowedSchemas: []string{"public"},
 		},
 		db,
-		io.Discard,
 	)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
@@ -183,7 +182,6 @@ func TestReadHandlerPostgres_Embed(t *testing.T) {
 			AllowedTables:  []string{"embed_users", "embed_posts"},
 		},
 		db,
-		io.Discard,
 	)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)

@@ -1,34 +1,42 @@
 package server
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
+
+	"github.com/mickamy/adms/internal/logger"
 )
 
-func recoverer(out io.Writer, next http.Handler) http.Handler {
+func recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
+		defer func(ctx context.Context) {
 			if rec := recover(); rec != nil {
-				fmt.Fprintf(out, "adms: panic in %s %s: %v\n", r.Method, r.URL.EscapedPath(), rec)
+				logger.Error(ctx, "panic",
+					"method", r.Method,
+					"path", r.URL.EscapedPath(),
+					"recover", fmt.Sprint(rec))
 				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
-		}()
+		}(r.Context())
 
 		next.ServeHTTP(w, r)
 	})
 }
 
-func logging(out io.Writer, next http.Handler) http.Handler {
+func logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 
 		next.ServeHTTP(rec, r)
 
-		fmt.Fprintf(out, "%s %s %d %s\n",
-			r.Method, r.URL.EscapedPath(), rec.status, time.Since(start).Round(time.Microsecond))
+		logger.Info(r.Context(), "request",
+			"method", r.Method,
+			"path", r.URL.EscapedPath(),
+			"status", rec.status,
+			"duration_ms", time.Since(start).Milliseconds())
 	})
 }
 
