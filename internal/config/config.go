@@ -30,6 +30,7 @@ type Config struct {
 	UI             UIConfig
 	CORSOrigins    []string
 	AuthTokenEnv   string
+	AuthToken      string // Resolved at runtime from AuthTokenEnv by the cli; empty disables bearer auth.
 	LogLevel       string
 	DefaultLimit   int
 	MaxLimit       int

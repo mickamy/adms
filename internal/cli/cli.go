@@ -33,6 +33,12 @@ func Run(args []string, _, stderr io.Writer) int {
 		return exit.Usage
 	}
 
+	if err := resolveAuthToken(&cfg); err != nil {
+		fmt.Fprintf(stderr, "adms: %v\n", err)
+
+		return exit.Usage
+	}
+
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -109,6 +115,27 @@ func resolveConfigPath(args []string) (string, error) {
 	default:
 		return "", fmt.Errorf("too many arguments (got %d, want at most 1)", len(args))
 	}
+}
+
+// resolveAuthToken reads the env var named by AuthTokenEnv into AuthToken.
+// An unset or empty env value is a startup error rather than a silent
+// "auth disabled" so the operator who opted in cannot end up serving an
+// open API by accident.
+func resolveAuthToken(cfg *config.Config) error {
+	if cfg.AuthTokenEnv == "" {
+		return nil
+	}
+
+	tok := os.Getenv(cfg.AuthTokenEnv)
+	if tok == "" {
+		return fmt.Errorf(
+			"auth_token_env %q is set but the environment variable is empty or unset",
+			cfg.AuthTokenEnv)
+	}
+
+	cfg.AuthToken = tok
+
+	return nil
 }
 
 func pingDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {

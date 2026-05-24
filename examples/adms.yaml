@@ -11,6 +11,9 @@ allowed_schemas:
 allowed_tables: []
 
 cors_origins: []
+# Set auth_token_env to the name of an environment variable that holds the
+# bearer token. adms then requires `Authorization: Bearer <token>` on every
+# request except /healthz. Leave empty to disable bearer auth.
 auth_token_env: ""
 log_level: info
 

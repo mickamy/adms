@@ -12,5 +12,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("DELETE /{table}", s.delete)
 
 	// logging wraps recoverer so panics still produce an access-log line.
-	return logging(s.logger, recoverer(s.logger, mux))
+	// auth sits inside both so 401 responses are logged and panics in the auth
+	// middleware itself are still caught.
+	return logging(s.logger, recoverer(s.logger, authBearer(s.logger, s.authToken, mux)))
 }

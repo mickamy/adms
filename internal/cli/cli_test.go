@@ -94,6 +94,22 @@ func TestRun_PreConnectionErrors(t *testing.T) {
 			wantExit:   exit.Usage,
 			wantStderr: `unknown driver "sqlite"`,
 		},
+		{
+			// Env name is unique to this test so the parallel runner cannot race
+			// with another test that happens to set the same variable.
+			name: "auth_token_env points to unset variable",
+			args: func(t *testing.T) []string {
+				p := filepath.Join(t.TempDir(), "adms.yaml")
+				body := "driver: postgres\ndsn: x\nauth_token_env: ADMS_AUTH_TOKEN_NOT_SET_IN_CLI_TEST\n"
+				if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+					t.Fatalf("write fixture: %v", err)
+				}
+
+				return []string{p}
+			},
+			wantExit:   exit.Usage,
+			wantStderr: "auth_token_env",
+		},
 	}
 
 	for _, tt := range tests {
@@ -109,6 +125,67 @@ func TestRun_PreConnectionErrors(t *testing.T) {
 
 			if !strings.Contains(stderr.String(), tt.wantStderr) {
 				t.Errorf("stderr = %q, want substring %q", stderr.String(), tt.wantStderr)
+			}
+		})
+	}
+}
+
+//nolint:paralleltest // t.Setenv mutates process-wide env and is not parallel-safe.
+func TestRun_ResolvesAuthTokenFromEnv(t *testing.T) {
+	const envName = "ADMS_AUTH_TOKEN_RESOLVED_IN_CLI_TEST"
+
+	// Exercise both branches of resolveAuthToken that follow a successful
+	// config.Load: the no-op path (auth_token_env unset) and the success path
+	// (env var set, token populated). Each case uses a DSN pointing at a
+	// closed TCP port so pingDB fails fast and the run returns exit.Error
+	// without us needing a real database.
+	cases := []struct {
+		name             string
+		authTokenEnvLine string
+		setenv           func(t *testing.T)
+	}{
+		{
+			name:             "auth_token_env unset returns nil and run reaches ping",
+			authTokenEnvLine: "",
+			setenv:           func(*testing.T) {},
+		},
+		{
+			name:             "auth_token_env points to populated env",
+			authTokenEnvLine: "auth_token_env: " + envName + "\n",
+			setenv: func(t *testing.T) {
+				t.Setenv(envName, "tk")
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setenv(t)
+
+			path := filepath.Join(t.TempDir(), "adms.yaml")
+
+			body := "driver: postgres\n" +
+				`dsn: "postgres://adms:adms@127.0.0.1:1/adms_test?sslmode=disable&connect_timeout=1"` + "\n" +
+				tc.authTokenEnvLine +
+				"timeout: 1s\n"
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatalf("write fixture: %v", err)
+			}
+
+			var stdout, stderr bytes.Buffer
+
+			code := cli.Run([]string{path}, &stdout, &stderr)
+			if code != exit.Error {
+				t.Fatalf("exit = %d, want %d (stderr=%q)", code, exit.Error, stderr.String())
+			}
+
+			if strings.Contains(stderr.String(), "auth_token_env") {
+				t.Errorf("stderr = %q, want auth_token_env NOT to appear (resolution should have succeeded)",
+					stderr.String())
+			}
+
+			if !strings.Contains(stderr.String(), "ping") {
+				t.Errorf("stderr = %q, want substring %q (run should reach pingDB)", stderr.String(), "ping")
 			}
 		})
 	}
