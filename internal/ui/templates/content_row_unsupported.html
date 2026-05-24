@@ -1,0 +1,18 @@
+{{define "content_row_unsupported.html"}}
+{{with .ContentTable}}
+<div class="mb-4 flex items-end justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-semibold">{{.Name}}</h1>
+    <p class="text-zinc-500 text-sm">{{.Schema}}</p>
+  </div>
+  <a href="/t/{{.Name}}" class="text-sm text-zinc-400 hover:text-zinc-200">← Back</a>
+</div>
+<div class="max-w-prose text-zinc-400">
+  <p class="mb-2">Per-row editing is not available for this table.</p>
+  <p class="text-sm text-zinc-500">
+    {{if .PrimaryKey}}Composite primary key ({{range $i, $col := .PrimaryKey}}{{if $i}}, {{end}}{{$col}}{{end}}){{else}}No primary key{{end}}
+    — the row URL cannot encode the full key. Use the API directly for write operations.
+  </p>
+</div>
+{{end}}
+{{end}}

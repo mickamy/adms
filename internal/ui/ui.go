@@ -129,6 +129,8 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /__healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /t/{table}", s.tableView)
+	mux.HandleFunc("GET /t/{table}/new", s.newRow)
+	mux.HandleFunc("GET /t/{table}/r/{pk}", s.rowView)
 
 	staticSub, err := fs.Sub(staticFS, "static")
 	if err != nil {

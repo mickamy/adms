@@ -106,6 +106,125 @@ func TestTableViewRenders(t *testing.T) {
 	}
 }
 
+func TestTableViewIncludesActions(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`href="/t/users/new"`,
+		`>actions<`,
+		`const pkColumn = "id"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
+func TestNewRowFormRenders(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users/new")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`>Insert<`,
+		`name="id"`,
+		`name="name"`,
+		`const tableName = "users"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}
+
+func TestNewRowUnknownTableReturns404(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/ghost/new")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestRowViewRenders(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users/r/1")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`>Save<`,
+		`>Delete<`,
+		`const pkColumn = "id"`,
+		`const pkValue = "1"`,
+		`name="name"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}
+
+func TestRowViewMultiPKShowsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema: "public",
+				Name:   "composite",
+				Columns: []schema.Column{
+					{Name: "a", Type: "bigint"},
+					{Name: "b", Type: "bigint"},
+				},
+				PrimaryKey: []string{"a", "b"},
+			},
+		},
+	}
+
+	ts := newTestUIServer(t, sch)
+
+	resp := httpGet(t, ts.URL+"/t/composite/r/anything")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+
+	body := readAll(t, resp)
+	if !strings.Contains(body, "Per-row editing is not available") {
+		t.Errorf("body missing unsupported notice\n---body---\n%s", body)
+	}
+}
+
 func TestTableViewUnknownReturns404(t *testing.T) {
 	t.Parallel()
 

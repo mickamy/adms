@@ -1,0 +1,77 @@
+{{define "content_new.html"}}
+{{with .ContentTable}}
+<div class="mb-4 flex items-end justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-semibold">New row · {{.Name}}</h1>
+    <p class="text-zinc-500 text-sm">{{.Schema}}</p>
+  </div>
+  <a href="/t/{{.Name}}" class="text-sm text-zinc-400 hover:text-zinc-200">← Back</a>
+</div>
+
+<form id="row-form" class="space-y-3 max-w-2xl">
+  {{range .Columns}}
+  <div>
+    <label class="block text-zinc-400 text-sm mb-1">
+      {{.Name}}
+      <span class="text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
+    </label>
+    <input data-col="{{.Name}}" name="{{.Name}}" placeholder="empty = column default / NULL"
+      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+  </div>
+  {{end}}
+  <div class="flex gap-2 items-center pt-2">
+    <button type="submit" class="px-3 py-1.5 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">Insert</button>
+    <span id="status" class="text-sm text-zinc-400"></span>
+  </div>
+</form>
+
+<script>
+  (function () {
+    const tableName = {{.Name}};
+    const columns = [{{range $i, $col := .Columns}}{{if $i}},{{end}}{{$col.Name}}{{end}}];
+    const apiOrigin = document.querySelector('meta[name="adms-api-origin"]').content;
+    const form = document.getElementById('row-form');
+    const status = document.getElementById('status');
+
+    function setStatus(msg, isError) {
+      status.textContent = msg;
+      status.className = 'text-sm ' + (isError ? 'text-red-400' : 'text-zinc-400');
+    }
+
+    async function readError(resp) {
+      const text = await resp.text();
+      try {
+        const p = JSON.parse(text);
+        return p.detail || p.title || text;
+      } catch (_) { return text || String(resp.status); }
+    }
+
+    function parseValue(v) {
+      if (v === '') return undefined;
+      if (v === 'null') return null;
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+      if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+      try { return JSON.parse(v); } catch (_) { return v; }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setStatus('Inserting…', false);
+      const body = {};
+      columns.forEach((c) => {
+        const v = parseValue(form.elements[c].value);
+        if (v !== undefined) body[c] = v;
+      });
+      const resp = await fetch(apiOrigin + '/' + tableName, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) { window.location.href = '/t/' + tableName; return; }
+      setStatus('POST ' + resp.status + ': ' + await readError(resp), true);
+    });
+  })();
+</script>
+{{end}}
+{{end}}
