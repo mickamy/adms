@@ -333,6 +333,38 @@ max_limit: 100`,
 			wantErr: "default_limit (500) must not exceed max_limit (100)",
 		},
 		{
+			name:     "max_body_bytes is honored when set",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+max_body_bytes: 5242880`,
+			want: config.Config{
+				Driver:       database.DriverPostgres,
+				DSN:          "x",
+				Listen:       config.DefaultListen,
+				Timeout:      config.DefaultTimeout,
+				LogLevel:     config.DefaultLogLevel,
+				UI:           config.UIConfig{Listen: config.DefaultUIListen},
+				MaxBodyBytes: 5 << 20,
+			},
+		},
+		{
+			name:     "negative max_body_bytes rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+max_body_bytes: -1`,
+			wantErr: "max_body_bytes",
+		},
+		{
+			name:     "explicit zero max_body_bytes rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+max_body_bytes: 0`,
+			wantErr: "max_body_bytes",
+		},
+		{
 			name:     "whitespace around scalar string fields is normalized",
 			filename: "adms.yaml",
 			body: `driver: "  postgres  "
@@ -680,6 +712,15 @@ func assertConfigEqual(t *testing.T, got, want config.Config) {
 
 	if got.MaxLimit != wantMaxLimit {
 		t.Errorf("MaxLimit = %d, want %d", got.MaxLimit, wantMaxLimit)
+	}
+
+	wantMaxBodyBytes := want.MaxBodyBytes
+	if wantMaxBodyBytes == 0 {
+		wantMaxBodyBytes = config.DefaultMaxBodyBytes
+	}
+
+	if got.MaxBodyBytes != wantMaxBodyBytes {
+		t.Errorf("MaxBodyBytes = %d, want %d", got.MaxBodyBytes, wantMaxBodyBytes)
 	}
 }
 
