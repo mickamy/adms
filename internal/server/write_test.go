@@ -600,6 +600,60 @@ func TestParseInsertBody_Errors(t *testing.T) {
 	}
 }
 
+func TestParseInsertBody_PreservesNumberPrecision(t *testing.T) {
+	t.Parallel()
+
+	// 12345678901234567890 exceeds 2^53; decoding via float64 would round it.
+	body := []byte(`{"id": 12345678901234567890, "amount": 1.234567890123456789}`)
+
+	rows, err := server.ParseInsertBody(body)
+	if err != nil {
+		t.Fatalf("ParseInsertBody: %v", err)
+	}
+
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+
+	idNum, ok := rows[0]["id"].(json.Number)
+	if !ok {
+		t.Fatalf("rows[0][\"id\"] = %T, want json.Number", rows[0]["id"])
+	}
+
+	if string(idNum) != "12345678901234567890" {
+		t.Errorf("id = %q, want preserved digits", string(idNum))
+	}
+
+	amountNum, ok := rows[0]["amount"].(json.Number)
+	if !ok {
+		t.Fatalf("rows[0][\"amount\"] = %T, want json.Number", rows[0]["amount"])
+	}
+
+	if string(amountNum) != "1.234567890123456789" {
+		t.Errorf("amount = %q, want preserved decimals", string(amountNum))
+	}
+}
+
+func TestParseUpdateBody_PreservesNumberPrecision(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"count": 9999999999999999999}`)
+
+	set, err := server.ParseUpdateBody(body)
+	if err != nil {
+		t.Fatalf("ParseUpdateBody: %v", err)
+	}
+
+	n, ok := set["count"].(json.Number)
+	if !ok {
+		t.Fatalf("set[\"count\"] = %T, want json.Number", set["count"])
+	}
+
+	if string(n) != "9999999999999999999" {
+		t.Errorf("count = %q, want preserved digits", string(n))
+	}
+}
+
 func TestParseUpdateBody_Errors(t *testing.T) {
 	t.Parallel()
 

@@ -274,6 +274,11 @@ func (s *Server) requireReturningSupport(w http.ResponseWriter, r *http.Request,
 // parseInsertBody accepts either a JSON object (single row) or a JSON array
 // of objects (bulk). Empty arrays and null bodies are rejected so the SQL
 // builder never sees a degenerate input.
+//
+// Numbers are decoded as json.Number (via UseNumber) rather than float64 so
+// large integers and high-precision decimals round-trip to the driver
+// without lossy float coercion; database/sql converts json.Number to a SQL
+// string parameter and the DB casts it deterministically.
 func parseInsertBody(body []byte) ([]map[string]any, error) {
 	trimmed := bytes.TrimLeft(body, " \t\r\n")
 	if len(trimmed) == 0 {
@@ -282,7 +287,7 @@ func parseInsertBody(body []byte) ([]map[string]any, error) {
 
 	if trimmed[0] == '[' {
 		var rows []map[string]any
-		if err := json.Unmarshal(body, &rows); err != nil {
+		if err := decodeJSONWithNumber(body, &rows); err != nil {
 			return nil, fmt.Errorf("invalid JSON array: %w", err)
 		}
 
@@ -300,7 +305,7 @@ func parseInsertBody(body []byte) ([]map[string]any, error) {
 	}
 
 	var row map[string]any
-	if err := json.Unmarshal(body, &row); err != nil {
+	if err := decodeJSONWithNumber(body, &row); err != nil {
 		return nil, fmt.Errorf("invalid JSON object: %w", err)
 	}
 
@@ -313,7 +318,7 @@ func parseInsertBody(body []byte) ([]map[string]any, error) {
 
 func parseUpdateBody(body []byte) (map[string]any, error) {
 	var set map[string]any
-	if err := json.Unmarshal(body, &set); err != nil {
+	if err := decodeJSONWithNumber(body, &set); err != nil {
 		return nil, fmt.Errorf("invalid JSON object: %w", err)
 	}
 
@@ -326,6 +331,20 @@ func parseUpdateBody(body []byte) (map[string]any, error) {
 	}
 
 	return set, nil
+}
+
+// decodeJSONWithNumber decodes body into target with UseNumber() set so JSON
+// numbers materialize as json.Number instead of float64. See parseInsertBody
+// for the precision rationale.
+func decodeJSONWithNumber(body []byte, target any) error {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+
+	if err := dec.Decode(target); err != nil {
+		return fmt.Errorf("decode: %w", err)
+	}
+
+	return nil
 }
 
 // executeWrite runs the statement and writes the response. When wantRet is
