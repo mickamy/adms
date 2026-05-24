@@ -20,8 +20,8 @@
           <a href="/t/{{.Name}}"
             data-table-name="{{.Name}}"
             class="block px-2 py-1 rounded hover:bg-zinc-800 {{if eq $.ActiveTable .Name}}bg-zinc-800 text-zinc-50{{else}}text-zinc-300{{end}}">
-            {{.Name}}
-            <span class="text-zinc-500 text-xs">{{.Schema}}</span>
+            <div class="break-all">{{.Name}}</div>
+            <div class="text-zinc-500 text-xs">{{.Schema}}</div>
           </a>
         </li>
         {{else}}
