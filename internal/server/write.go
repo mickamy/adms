@@ -15,12 +15,6 @@ import (
 	"github.com/mickamy/adms/internal/schema"
 )
 
-// maxRequestBodyBytes caps how much of a write body we read into memory. 10
-// MiB is enough for sizable bulk inserts but stops a hostile client from
-// exhausting the server with a single PATCH/POST. Phase 6 can revisit this
-// once we understand real-world body sizes.
-const maxRequestBodyBytes = 10 << 20
-
 type preferReturn int
 
 const (
@@ -58,9 +52,9 @@ func parsePrefer(h http.Header) preferDirective {
 
 // Handler ordering note: validate Prefer / filter / read_only gates BEFORE
 // reading the request body. http.MaxBytesReader still allocates up to
-// maxRequestBodyBytes on a fast client, so rejecting on headers / query
-// first keeps a flood of unsupported requests from forcing the server to
-// pull 10 MiB per request.
+// s.maxBodyBytes on a fast client, so rejecting on headers / query first
+// keeps a flood of unsupported requests from forcing the server to pull
+// the whole body for every request.
 
 func (s *Server) insert(w http.ResponseWriter, r *http.Request) {
 	table, ok := s.resolveWriteTarget(w, r)
@@ -244,12 +238,12 @@ func (s *Server) parseFilter(w http.ResponseWriter, r *http.Request) (query.Quer
 }
 
 func (s *Server) readJSONBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBodyBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.maxBodyBytes))
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			writeProblem(w, r, s.logger, http.StatusRequestEntityTooLarge,
 				"body-too-large", "Body too large",
-				fmt.Sprintf("request body exceeded %d bytes", maxRequestBodyBytes))
+				fmt.Sprintf("request body exceeded %d bytes", s.maxBodyBytes))
 
 			return nil, false
 		}

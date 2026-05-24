@@ -27,6 +27,7 @@ type Server struct {
 	allowedTables  []string
 	defaultLimit   int
 	maxLimit       int
+	maxBodyBytes   int64
 	readOnly       bool
 	timeout        time.Duration
 	logger         io.Writer
@@ -81,6 +82,11 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 			cfg.DefaultLimit, cfg.MaxLimit)
 	}
 
+	maxBodyBytes := cfg.MaxBodyBytes
+	if maxBodyBytes <= 0 {
+		maxBodyBytes = config.DefaultMaxBodyBytes
+	}
+
 	dlc, err := cfg.Driver.Dialect()
 	if err != nil {
 		return nil, fmt.Errorf("server: %w", err)
@@ -99,6 +105,7 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		allowedTables:  cfg.AllowedTables,
 		defaultLimit:   cfg.DefaultLimit,
 		maxLimit:       cfg.MaxLimit,
+		maxBodyBytes:   maxBodyBytes,
 		readOnly:       cfg.ReadOnly,
 		timeout:        cfg.Timeout,
 		logger:         logger,

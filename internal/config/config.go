@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	DefaultListen   = ":7777"
-	DefaultUIListen = ":7778"
-	DefaultTimeout  = 30 * time.Second
-	DefaultLogLevel = "info"
-	DefaultLimit    = 100
-	DefaultMaxLimit = 1000
+	DefaultListen       = ":7777"
+	DefaultUIListen     = ":7778"
+	DefaultTimeout      = 30 * time.Second
+	DefaultLogLevel     = "info"
+	DefaultLimit        = 100
+	DefaultMaxLimit     = 1000
+	DefaultMaxBodyBytes = int64(10 << 20) // 10 MiB
 )
 
 type Config struct {
@@ -32,6 +33,7 @@ type Config struct {
 	LogLevel       string
 	DefaultLimit   int
 	MaxLimit       int
+	MaxBodyBytes   int64
 }
 
 type UIConfig struct {
@@ -118,6 +120,15 @@ func buildConfig(c config) (Config, error) {
 		return Config{}, fmt.Errorf("default_limit (%d) must not exceed max_limit (%d)", defaultLimit, maxLimit)
 	}
 
+	maxBodyBytes := DefaultMaxBodyBytes
+	if c.MaxBodyBytes != nil {
+		maxBodyBytes = *c.MaxBodyBytes
+	}
+
+	if maxBodyBytes <= 0 {
+		return Config{}, fmt.Errorf("invalid max_body_bytes %d: must be positive", maxBodyBytes)
+	}
+
 	return Config{
 		Driver:         drv,
 		DSN:            c.DSN,
@@ -135,6 +146,7 @@ func buildConfig(c config) (Config, error) {
 		LogLevel:     logLevel,
 		DefaultLimit: defaultLimit,
 		MaxLimit:     maxLimit,
+		MaxBodyBytes: maxBodyBytes,
 	}, nil
 }
 

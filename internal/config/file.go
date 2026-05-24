@@ -27,6 +27,7 @@ type config struct {
 	LogLevel       string   `toml:"log_level"       yaml:"log_level"`
 	DefaultLimit   *int     `toml:"default_limit"   yaml:"default_limit"`
 	MaxLimit       *int     `toml:"max_limit"       yaml:"max_limit"`
+	MaxBodyBytes   *int64   `toml:"max_body_bytes"  yaml:"max_body_bytes"`
 }
 
 type uiConfig struct {
