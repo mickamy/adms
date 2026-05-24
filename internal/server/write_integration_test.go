@@ -391,6 +391,32 @@ func TestWriteHandlerPostgres_DBErrorReturns500(t *testing.T) {
 	})
 }
 
+func TestWriteHandlerPostgres_DuplicateInsertReturns409(t *testing.T) {
+	t.Parallel()
+
+	writeFixturePostgres(t, func(c testCtx) {
+		_, err := c.db.ExecContext(c.t.Context(),
+			fmt.Sprintf(`INSERT INTO %s (id, name, active) VALUES (1, 'alice', true)`, c.table))
+		if err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+
+		resp := c.request(http.MethodPost, "/"+c.table,
+			`{"id":1,"name":"bob","active":true}`, nil)
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusConflict {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 409; body = %s", resp.StatusCode, body)
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), "constraint-violation") {
+			t.Errorf("body = %s, want it to mention constraint-violation", body)
+		}
+	})
+}
+
 func TestWriteHandlerPostgres_DeleteMinimalCountExact(t *testing.T) {
 	t.Parallel()
 
