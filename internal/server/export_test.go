@@ -33,6 +33,7 @@ var (
 	Logging              = logging
 	AuthBearer           = authBearer
 	BearerToken          = bearerToken
+	Cors                 = cors
 	NormalizeScanValue   = normalizeScanValue
 	FilterAllowedTables  = filterAllowedTables
 	ParsePrefer          = parsePrefer

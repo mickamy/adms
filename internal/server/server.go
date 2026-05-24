@@ -30,6 +30,7 @@ type Server struct {
 	maxBodyBytes   int64
 	readOnly       bool
 	authToken      string
+	corsOrigins    []string
 	timeout        time.Duration
 	logger         io.Writer
 
@@ -109,6 +110,7 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector, logger 
 		maxBodyBytes:   maxBodyBytes,
 		readOnly:       cfg.ReadOnly,
 		authToken:      cfg.AuthToken,
+		corsOrigins:    cfg.CORSOrigins,
 		timeout:        cfg.Timeout,
 		logger:         logger,
 	}, nil
