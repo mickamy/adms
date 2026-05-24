@@ -161,8 +161,7 @@ func TestUpdate_FilterErrorWrapsBuildWhereFailures(t *testing.T) {
 		t.Fatal("Update: expected error, got nil")
 	}
 
-	var fe *build.FilterError
-	if !errors.As(err, &fe) {
+	if _, ok := errors.AsType[*build.FilterError](err); !ok {
 		t.Errorf("error %v should wrap *build.FilterError so handlers can map it to invalid-query", err)
 	}
 }
@@ -181,8 +180,7 @@ func TestUpdate_BodyErrorIsNotFilterError(t *testing.T) {
 		t.Fatal("Update: expected error, got nil")
 	}
 
-	var fe *build.FilterError
-	if errors.As(err, &fe) {
+	if _, ok := errors.AsType[*build.FilterError](err); ok {
 		t.Errorf("SET-column failure should not wrap *build.FilterError; got %v", err)
 	}
 }
