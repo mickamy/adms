@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -89,7 +90,9 @@ func writeFixturePostgres(t *testing.T, fn func(ctx testCtx)) {
 
 // uniqueTableName turns a test name into a PG-safe identifier; only ASCII
 // letters, digits, and underscores survive, so siblings of the same TestFoo
-// run against distinct tables.
+// run against distinct tables. Postgres caps identifiers at NAMEDATALEN-1
+// = 63 bytes by default, so long names are truncated and a stable hash
+// suffix is appended to keep distinct test names distinct after truncation.
 func uniqueTableName(testName string) string {
 	var b strings.Builder
 
@@ -104,7 +107,49 @@ func uniqueTableName(testName string) string {
 		}
 	}
 
-	return strings.ToLower(b.String())
+	name := strings.ToLower(b.String())
+
+	const maxIdentLen = 63
+	if len(name) <= maxIdentLen {
+		return name
+	}
+
+	suffix := fmt.Sprintf("_%08x", crc32.ChecksumIEEE([]byte(name)))
+
+	return name[:maxIdentLen-len(suffix)] + suffix
+}
+
+func TestUniqueTableName_FitsPostgresIdentLimit(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{"short name passes through", "TestFoo"},
+		{"exactly at limit", strings.Repeat("X", 51)},
+		{"well over limit", strings.Repeat("X", 200)},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := uniqueTableName(tt.in)
+			if len(got) > 63 {
+				t.Errorf("len(%q) = %d, want <= 63", got, len(got))
+			}
+		})
+	}
+
+	// Distinct long names should still produce distinct identifiers after
+	// truncation thanks to the hash suffix.
+	a := uniqueTableName(strings.Repeat("X", 100) + "A")
+	b := uniqueTableName(strings.Repeat("X", 100) + "B")
+
+	if a == b {
+		t.Errorf("uniqueTableName collision after truncation: %q == %q", a, b)
+	}
 }
 
 type testCtx struct {
