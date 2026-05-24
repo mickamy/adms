@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"database/sql"
-	"io"
 	"net"
 	"net/http"
 
@@ -23,9 +22,8 @@ func NewWithIntrospector(
 	cfg config.Config,
 	db *sql.DB,
 	intro schema.Introspector,
-	logger io.Writer,
 ) (*Server, error) {
-	return newServer(cfg, db, intro, logger)
+	return newServer(cfg, db, intro)
 }
 
 var (
@@ -55,9 +53,8 @@ type PreferDirective = preferDirective
 func WriteProblem(
 	w http.ResponseWriter,
 	r *http.Request,
-	logger io.Writer,
 	status int,
 	typeSuffix, title, detail string,
 ) {
-	writeProblem(w, r, logger, status, typeSuffix, title, detail)
+	writeProblem(w, r, status, typeSuffix, title, detail)
 }

@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/mickamy/adms/internal/build"
+	"github.com/mickamy/adms/internal/logger"
 	"github.com/mickamy/adms/internal/query"
 )
 
@@ -29,7 +30,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 
 	table, ok := s.tableIndex[tableName]
 	if !ok {
-		writeProblem(w, r, s.logger, http.StatusNotFound,
+		writeProblem(w, r, http.StatusNotFound,
 			"unknown-table", "Unknown table",
 			fmt.Sprintf("table %q is not exposed by this server", tableName))
 
@@ -38,7 +39,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 
 	q, err := query.Parse(r.URL.Query())
 	if err != nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-query", "Invalid query", err.Error())
 
 		return
@@ -46,7 +47,7 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 
 	stmt, args, embedAliases, err := build.Select(q, table, s.tableIndex, s.dialect, s.defaultLimit, s.maxLimit)
 	if err != nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
+		writeProblem(w, r, http.StatusBadRequest,
 			"invalid-query", "Invalid query", err.Error())
 
 		return
@@ -59,8 +60,9 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	// introspected schema; values are passed as placeholder args, not interpolated.
 	rows, err := s.db.QueryContext(queryCtx, stmt, args...) //nolint:gosec // see comment above
 	if err != nil {
-		fmt.Fprintf(s.logger, "adms: query %s %s: %v\n", r.Method, r.URL.EscapedPath(), err)
-		writeProblem(w, r, s.logger, http.StatusInternalServerError,
+		logger.Error(r.Context(), "query",
+			"method", r.Method, "path", r.URL.EscapedPath(), "err", err.Error())
+		writeProblem(w, r, http.StatusInternalServerError,
 			"db-error", "Database error", "the database refused or failed to execute the query")
 
 		return
@@ -69,8 +71,9 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 
 	result, err := rowsToJSON(rows, embedAliases)
 	if err != nil {
-		fmt.Fprintf(s.logger, "adms: encode rows %s %s: %v\n", r.Method, r.URL.EscapedPath(), err)
-		writeProblem(w, r, s.logger, http.StatusInternalServerError,
+		logger.Error(r.Context(), "encode rows",
+			"method", r.Method, "path", r.URL.EscapedPath(), "err", err.Error())
+		writeProblem(w, r, http.StatusInternalServerError,
 			"db-error", "Database error", "failed to read rows from the database")
 
 		return
@@ -78,8 +81,8 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		fmt.Fprintf(s.logger, "adms: encode rows for %s %s: %v\n",
-			r.Method, r.URL.EscapedPath(), err)
+		logger.Error(r.Context(), "encode response",
+			"method", r.Method, "path", r.URL.EscapedPath(), "err", err.Error())
 	}
 }
 

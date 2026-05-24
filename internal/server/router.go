@@ -14,8 +14,5 @@ func (s *Server) routes() http.Handler {
 	// logging wraps recoverer so panics still produce an access-log line.
 	// cors sits outside authBearer so OPTIONS preflight, which carries no
 	// Authorization header, can be answered without tripping the auth gate.
-	return logging(s.logger,
-		recoverer(s.logger,
-			cors(s.corsOrigins,
-				authBearer(s.logger, s.authToken, mux))))
+	return logging(recoverer(cors(s.corsOrigins, authBearer(s.authToken, mux))))
 }

@@ -23,8 +23,6 @@ import (
 func newReadOnlyTestServer(t *testing.T, sch schema.Schema) *httptest.Server {
 	t.Helper()
 
-	var logs syncBuffer
-
 	srv, err := server.NewWithIntrospector(
 		config.Config{
 			Driver:       database.DriverPostgres,
@@ -35,7 +33,6 @@ func newReadOnlyTestServer(t *testing.T, sch schema.Schema) *httptest.Server {
 		},
 		stubDB,
 		stubIntrospector{schema: sch},
-		&logs,
 	)
 	if err != nil {
 		t.Fatalf("server.NewWithIntrospector: %v", err)
@@ -198,7 +195,7 @@ func TestWrite_ReadOnlyForbids(t *testing.T) {
 func TestWrite_UnknownTable(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, schema.Schema{})
+	ts := newTestServer(t, schema.Schema{})
 
 	cases := []struct {
 		method string
@@ -235,7 +232,7 @@ func TestWrite_UnknownTable(t *testing.T) {
 func TestPatch_RequiresFilter(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users", `{"name":"alice"}`)
 	defer func() { _ = resp.Body.Close() }()
@@ -257,7 +254,7 @@ func TestPatch_RequiresFilter(t *testing.T) {
 func TestDelete_RequiresFilter(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodDelete, ts.URL+"/users", "")
 	defer func() { _ = resp.Body.Close() }()
@@ -279,7 +276,7 @@ func TestDelete_RequiresFilter(t *testing.T) {
 func TestPost_RejectsEmptyBody(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPost, ts.URL+"/users", "")
 	defer func() { _ = resp.Body.Close() }()
@@ -292,7 +289,7 @@ func TestPost_RejectsEmptyBody(t *testing.T) {
 func TestPost_RejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPost, ts.URL+"/users", "not json")
 	defer func() { _ = resp.Body.Close() }()
@@ -314,7 +311,7 @@ func TestPost_RejectsInvalidJSON(t *testing.T) {
 func TestPost_RejectsEmptyArray(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPost, ts.URL+"/users", "[]")
 	defer func() { _ = resp.Body.Close() }()
@@ -327,7 +324,7 @@ func TestPost_RejectsEmptyArray(t *testing.T) {
 func TestPost_RejectsUnknownColumn(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPost, ts.URL+"/users", `{"ghost":"value"}`)
 	defer func() { _ = resp.Body.Close() }()
@@ -345,7 +342,7 @@ func TestPost_RejectsUnknownColumn(t *testing.T) {
 func TestPatch_RejectsEmptyObject(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users?id=eq.1", `{}`)
 	defer func() { _ = resp.Body.Close() }()
@@ -358,7 +355,7 @@ func TestPatch_RejectsEmptyObject(t *testing.T) {
 func TestPost_RejectsBodyOver10MiB(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	// http.MaxBytesReader fires MaxBytesError once the underlying stream
 	// exceeds the cap, so a body just past the limit is enough.
@@ -384,8 +381,6 @@ func TestPost_RejectsBodyOver10MiB(t *testing.T) {
 func newMySQLTestServer(t *testing.T, sch schema.Schema) *httptest.Server {
 	t.Helper()
 
-	var logs syncBuffer
-
 	srv, err := server.NewWithIntrospector(
 		config.Config{
 			Driver:       database.DriverMySQL,
@@ -395,7 +390,6 @@ func newMySQLTestServer(t *testing.T, sch schema.Schema) *httptest.Server {
 		},
 		stubDB,
 		stubIntrospector{schema: sch},
-		&logs,
 	)
 	if err != nil {
 		t.Fatalf("server.NewWithIntrospector: %v", err)
@@ -489,7 +483,7 @@ func TestWrite_RepresentationUnsupportedOnMySQL(t *testing.T) {
 func TestPatch_RejectsBodyOver10MiB(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	big := strings.Repeat("a", (10<<20)+1)
 
@@ -506,7 +500,7 @@ func TestPatch_RejectsBodyOver10MiB(t *testing.T) {
 func TestPatch_RejectsInvalidQuery(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users?id=bogus.42", `{"name":"x"}`)
 	defer func() { _ = resp.Body.Close() }()
@@ -521,7 +515,7 @@ func TestPatch_RejectsInvalidQuery(t *testing.T) {
 func TestPatch_RejectsUnknownColumnInBody(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users?id=eq.1", `{"ghost":"value"}`)
 	defer func() { _ = resp.Body.Close() }()
@@ -536,7 +530,7 @@ func TestPatch_RejectsUnknownColumnInBody(t *testing.T) {
 func TestPatch_RejectsUnknownColumnInFilter(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	// Valid SET body, but the filter references an unknown column. build.Update
 	// surfaces a *build.FilterError; the handler must map that to invalid-query.
@@ -553,7 +547,7 @@ func TestPatch_RejectsUnknownColumnInFilter(t *testing.T) {
 func TestDelete_RejectsInvalidQuery(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodDelete, ts.URL+"/users?id=bogus.42", "")
 	defer func() { _ = resp.Body.Close() }()
@@ -568,7 +562,7 @@ func TestDelete_RejectsInvalidQuery(t *testing.T) {
 func TestDelete_RejectsUnknownColumnInFilter(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, usersSchema())
+	ts := newTestServer(t, usersSchema())
 
 	resp := httpRequest(t, http.MethodDelete, ts.URL+"/users?ghost=eq.1", "")
 	defer func() { _ = resp.Body.Close() }()

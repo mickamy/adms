@@ -19,7 +19,7 @@ func TestAuthBearer_EmptyTokenIsNoOp(t *testing.T) {
 		_, _ = io.WriteString(w, "ok")
 	})
 
-	ts := httptest.NewServer(server.AuthBearer(io.Discard, "", ok))
+	ts := httptest.NewServer(server.AuthBearer("", ok))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -47,7 +47,7 @@ func TestAuthBearer_AcceptsValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	ts := httptest.NewServer(server.AuthBearer(io.Discard, token, next))
+	ts := httptest.NewServer(server.AuthBearer(token, next))
 	t.Cleanup(ts.Close)
 
 	req := newRequest(t, ts.URL+"/")
@@ -76,7 +76,7 @@ func TestAuthBearer_LowercaseSchemeAccepted(t *testing.T) {
 
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	ts := httptest.NewServer(server.AuthBearer(io.Discard, token, ok))
+	ts := httptest.NewServer(server.AuthBearer(token, ok))
 	t.Cleanup(ts.Close)
 
 	req := newRequest(t, ts.URL+"/")
@@ -101,7 +101,7 @@ func TestAuthBearer_RejectsMissingHeader(t *testing.T) {
 		t.Error("next handler should not be invoked without credentials")
 	})
 
-	ts := httptest.NewServer(server.AuthBearer(io.Discard, "s3cret", next))
+	ts := httptest.NewServer(server.AuthBearer("s3cret", next))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -125,7 +125,7 @@ func TestAuthBearer_RejectsWrongToken(t *testing.T) {
 		t.Error("next handler should not be invoked with bad token")
 	})
 
-	ts := httptest.NewServer(server.AuthBearer(io.Discard, "s3cret", next))
+	ts := httptest.NewServer(server.AuthBearer("s3cret", next))
 	t.Cleanup(ts.Close)
 
 	req := newRequest(t, ts.URL+"/")
@@ -170,7 +170,7 @@ func TestAuthBearer_RejectsWrongScheme(t *testing.T) {
 				t.Error("next handler should not be invoked for malformed Authorization header")
 			})
 
-			ts := httptest.NewServer(server.AuthBearer(io.Discard, "s3cret", next))
+			ts := httptest.NewServer(server.AuthBearer("s3cret", next))
 			t.Cleanup(ts.Close)
 
 			req := newRequest(t, ts.URL+"/")
@@ -218,7 +218,7 @@ func TestAuthBearer_HealthzBypassesAuth(t *testing.T) {
 				_, _ = io.WriteString(w, "ok")
 			})
 
-			ts := httptest.NewServer(server.AuthBearer(io.Discard, "s3cret", next))
+			ts := httptest.NewServer(server.AuthBearer("s3cret", next))
 			t.Cleanup(ts.Close)
 
 			resp := httpGet(t, ts.URL+tc.path) // no Authorization header

@@ -25,9 +25,8 @@ func newCorsHandler(t *testing.T, origins []string, next http.Handler) *httptest
 	return ts
 }
 
-// doCorsRequest issues the request and returns the response. The caller MUST
-// `defer resp.Body.Close()` — bodyclose lints individual callers, so the
-// helper cannot own the close.
+// Callers must `defer resp.Body.Close()`; bodyclose lints each call site
+// and will miss a deferred close hidden in this helper.
 func doCorsRequest(t *testing.T, ts *httptest.Server, method, path string, headers map[string]string) *http.Response {
 	t.Helper()
 
@@ -260,8 +259,6 @@ func TestCors_MultipleAllowedOrigins(t *testing.T) {
 }
 
 func TestServerAppliesCORSOrigins(t *testing.T) {
-	// End-to-end: build a Server with CORS + auth and confirm preflight
-	// OPTIONS bypasses bearer auth, while real GET still requires the token.
 	t.Parallel()
 
 	const token = "tk"
@@ -277,7 +274,6 @@ func TestServerAppliesCORSOrigins(t *testing.T) {
 		},
 		stubDB,
 		stubIntrospector{schema: schema.Schema{}},
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("server.NewWithIntrospector: %v", err)

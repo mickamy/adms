@@ -2,9 +2,10 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/mickamy/adms/internal/logger"
 )
 
 const problemTypePrefix = "https://adms.dev/errors/"
@@ -25,7 +26,6 @@ type Problem struct {
 func writeProblem(
 	w http.ResponseWriter,
 	r *http.Request,
-	logger io.Writer,
 	status int,
 	typeSuffix, title, detail string,
 ) {
@@ -37,8 +37,10 @@ func writeProblem(
 		Instance: r.URL.RequestURI(),
 	})
 	if err != nil {
-		fmt.Fprintf(logger, "adms: encode problem details for %s %s: %v\n",
-			r.Method, r.URL.EscapedPath(), err)
+		logger.Error(r.Context(), "encode problem details",
+			"method", r.Method,
+			"path", r.URL.EscapedPath(),
+			"err", err.Error())
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = io.WriteString(w, "internal server error\n")

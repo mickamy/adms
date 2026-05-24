@@ -99,6 +99,13 @@ func buildConfig(c config) (Config, error) {
 		logLevel = DefaultLogLevel
 	}
 
+	logLevel = strings.ToLower(logLevel)
+	switch logLevel {
+	case "debug", "info", "warn", "error":
+	default:
+		return Config{}, fmt.Errorf("invalid log_level %q (want debug, info, warn, or error)", c.LogLevel)
+	}
+
 	defaultLimit := DefaultLimit
 	if c.DefaultLimit != nil {
 		defaultLimit = *c.DefaultLimit

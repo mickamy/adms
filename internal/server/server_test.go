@@ -16,14 +16,13 @@ import (
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
+	"github.com/mickamy/adms/internal/logger"
 	"github.com/mickamy/adms/internal/schema"
 	"github.com/mickamy/adms/internal/server"
 )
 
-func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuffer) {
+func newTestServer(t *testing.T, sch schema.Schema) *httptest.Server {
 	t.Helper()
-
-	var logs syncBuffer
 
 	srv, err := server.NewWithIntrospector(
 		config.Config{
@@ -34,7 +33,6 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 		},
 		stubDB,
 		stubIntrospector{schema: sch},
-		&logs,
 	)
 	if err != nil {
 		t.Fatalf("server.NewWithIntrospector: %v", err)
@@ -47,12 +45,46 @@ func newTestServer(t *testing.T, sch schema.Schema) (*httptest.Server, *syncBuff
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
 
-	return ts, &logs
+	return ts
 }
 
-// stubDB is a non-nil but inert sentinel for tests that do not exercise the
-// DB. Server construction now rejects nil DBs, and these tests reach the
-// handler only on error paths that return before any DB call.
+// captureLogs swaps the slog default for a fresh syncBuffer; callers must
+// not run in parallel since the default is process-wide.
+func captureLogs(t *testing.T) *syncBuffer {
+	t.Helper()
+
+	var buf syncBuffer
+
+	logger.Capture(t, &buf)
+
+	return &buf
+}
+
+func findLogRecord(t *testing.T, raw, msg string) map[string]any {
+	t.Helper()
+
+	for line := range strings.SplitSeq(strings.TrimSpace(raw), "\n") {
+		if line == "" {
+			continue
+		}
+
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			continue
+		}
+
+		if rec["msg"] == msg {
+			return rec
+		}
+	}
+
+	t.Fatalf("no log record with msg=%q in:\n%s", msg, raw)
+
+	return nil
+}
+
+// stubDB satisfies the non-nil DB precondition for tests that fail before
+// any DB call.
 var stubDB = &sql.DB{}
 
 type stubIntrospector struct {
@@ -64,8 +96,7 @@ func (s stubIntrospector) Introspect(_ context.Context, _ *sql.DB, _ []string) (
 	return s.schema, s.err
 }
 
-// syncBuffer wraps a bytes.Buffer with a mutex so concurrent writes from the
-// server goroutine and reads from the test goroutine are race-safe under -race.
+// syncBuffer is a race-safe bytes.Buffer for cross-goroutine log capture.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -104,7 +135,7 @@ func httpGet(t *testing.T, url string) *http.Response {
 func TestHealthz(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, schema.Schema{})
+	ts := newTestServer(t, schema.Schema{})
 
 	resp := httpGet(t, ts.URL+"/healthz")
 	defer func() { _ = resp.Body.Close() }()
@@ -144,7 +175,7 @@ func TestSchemaDump(t *testing.T) {
 		},
 	}
 
-	ts, _ := newTestServer(t, sch)
+	ts := newTestServer(t, sch)
 
 	resp := httpGet(t, ts.URL+"/")
 	defer func() { _ = resp.Body.Close() }()
@@ -170,7 +201,7 @@ func TestSchemaDump(t *testing.T) {
 func TestRootOnlyMatchesExactPath(t *testing.T) {
 	t.Parallel()
 
-	ts, _ := newTestServer(t, schema.Schema{})
+	ts := newTestServer(t, schema.Schema{})
 
 	resp := httpGet(t, ts.URL+"/does-not-exist")
 	defer func() { _ = resp.Body.Close() }()
@@ -180,30 +211,37 @@ func TestRootOnlyMatchesExactPath(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // captureLogs mutates the process-wide slog default.
 func TestLoggingMiddlewareEmitsLine(t *testing.T) {
-	t.Parallel()
-
-	ts, logs := newTestServer(t, schema.Schema{})
+	logs := captureLogs(t)
+	ts := newTestServer(t, schema.Schema{})
 
 	resp := httpGet(t, ts.URL+"/healthz")
 	_ = resp.Body.Close()
 
-	out := logs.String()
-	if !strings.Contains(out, "GET /healthz 200") {
-		t.Errorf("log output = %q, want substring %q", out, "GET /healthz 200")
+	rec := findLogRecord(t, logs.String(), "request")
+	if rec["method"] != "GET" {
+		t.Errorf("method = %v, want GET", rec["method"])
+	}
+
+	if rec["path"] != "/healthz" {
+		t.Errorf("path = %v, want /healthz", rec["path"])
+	}
+
+	if rec["status"] != float64(http.StatusOK) {
+		t.Errorf("status = %v, want %d", rec["status"], http.StatusOK)
 	}
 }
 
+//nolint:paralleltest // captureLogs mutates the process-wide slog default.
 func TestRecovererTurnsPanicInto500(t *testing.T) {
-	t.Parallel()
-
-	var logs syncBuffer
+	logs := captureLogs(t)
 
 	panicking := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		panic("boom")
 	})
 
-	ts := httptest.NewServer(server.Recoverer(&logs, panicking))
+	ts := httptest.NewServer(server.Recoverer(panicking))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -218,17 +256,16 @@ func TestRecovererTurnsPanicInto500(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // captureLogs mutates the process-wide slog default.
 func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
-	t.Parallel()
-
-	var logs syncBuffer
+	logs := captureLogs(t)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.WriteHeader(http.StatusTeapot) // ignored; first one wins.
 	})
 
-	ts := httptest.NewServer(server.Logging(&logs, handler))
+	ts := httptest.NewServer(server.Logging(handler))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -238,48 +275,15 @@ func TestStatusRecorderIgnoresDuplicateWriteHeader(t *testing.T) {
 		t.Errorf("status = %d, want %d (first WriteHeader wins)", resp.StatusCode, http.StatusNotFound)
 	}
 
-	if !strings.Contains(logs.String(), " 404 ") {
-		t.Errorf("log = %q, want substring %q", logs.String(), " 404 ")
-	}
-}
-
-func TestServerWithNilLoggerDoesNotPanic(t *testing.T) {
-	t.Parallel()
-
-	srv, err := server.NewWithIntrospector(
-		config.Config{
-			Driver:       database.DriverPostgres,
-			Timeout:      time.Second,
-			DefaultLimit: 100,
-			MaxLimit:     1000,
-		},
-		stubDB,
-		stubIntrospector{},
-		nil, // Logger left nil
-	)
-	if err != nil {
-		t.Fatalf("server.NewWithIntrospector: %v", err)
-	}
-
-	if err := srv.Prepare(t.Context()); err != nil {
-		t.Fatalf("prepare: %v", err)
-	}
-
-	ts := httptest.NewServer(srv.Routes())
-	t.Cleanup(ts.Close)
-
-	resp := httpGet(t, ts.URL+"/healthz")
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
+	rec := findLogRecord(t, logs.String(), "request")
+	if rec["status"] != float64(http.StatusNotFound) {
+		t.Errorf("status = %v, want %d (first WriteHeader wins in access log)",
+			rec["status"], http.StatusNotFound)
 	}
 }
 
 func TestStatusRecorderUnwrapAllowsFlush(t *testing.T) {
 	t.Parallel()
-
-	var logs syncBuffer
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if err := http.NewResponseController(w).Flush(); err != nil {
@@ -290,7 +294,7 @@ func TestStatusRecorderUnwrapAllowsFlush(t *testing.T) {
 		_, _ = io.WriteString(w, "flushed")
 	})
 
-	ts := httptest.NewServer(server.Logging(&logs, handler))
+	ts := httptest.NewServer(server.Logging(handler))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -310,17 +314,16 @@ func TestStatusRecorderUnwrapAllowsFlush(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // captureLogs mutates the process-wide slog default.
 func TestPanicProducesLoggedFiveHundred(t *testing.T) {
-	t.Parallel()
-
-	var logs syncBuffer
+	logs := captureLogs(t)
 
 	panicking := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		panic("boom")
 	})
 
 	// Mirror the router's wrapping: logging(recoverer(handler)).
-	ts := httptest.NewServer(server.Logging(&logs, server.Recoverer(&logs, panicking)))
+	ts := httptest.NewServer(server.Logging(server.Recoverer(panicking)))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -331,12 +334,15 @@ func TestPanicProducesLoggedFiveHundred(t *testing.T) {
 	}
 
 	out := logs.String()
-	if !strings.Contains(out, "panic") {
-		t.Errorf("log = %q, want substring %q", out, "panic")
+
+	panicRec := findLogRecord(t, out, "panic")
+	if panicRec["recover"] != "boom" {
+		t.Errorf("recover = %v, want %q", panicRec["recover"], "boom")
 	}
 
-	if !strings.Contains(out, " 500 ") {
-		t.Errorf("log = %q, want access-log line with 500", out)
+	reqRec := findLogRecord(t, out, "request")
+	if reqRec["status"] != float64(http.StatusInternalServerError) {
+		t.Errorf("access log status = %v, want %d", reqRec["status"], http.StatusInternalServerError)
 	}
 }
 
@@ -350,7 +356,6 @@ func TestNewRejectsUnknownDriver(t *testing.T) {
 			MaxLimit:     1000,
 		},
 		stubDB,
-		nil,
 	)
 	if err == nil {
 		t.Fatal("New() error = nil, want non-nil for unknown driver")
@@ -373,7 +378,6 @@ func TestNewRequiresDB(t *testing.T) {
 		},
 		nil,
 		stubIntrospector{},
-		nil,
 	)
 	if err == nil {
 		t.Fatal("NewWithIntrospector error = nil, want error for nil db")
@@ -396,7 +400,6 @@ func TestNewRejectsDefaultLimitExceedingMaxLimit(t *testing.T) {
 		},
 		stubDB,
 		stubIntrospector{},
-		nil,
 	)
 	if err == nil {
 		t.Fatal("NewWithIntrospector error = nil, want error for default_limit > max_limit")
@@ -414,7 +417,6 @@ func TestNewRequiresPositiveTimeout(t *testing.T) {
 		config.Config{},
 		stubDB,
 		stubIntrospector{},
-		nil,
 	)
 	if err == nil {
 		t.Fatal("NewWithIntrospector() error = nil, want non-nil when Timeout is zero")
@@ -428,8 +430,6 @@ func TestNewRequiresPositiveTimeout(t *testing.T) {
 func TestServerRunReturnsListenFailure(t *testing.T) {
 	t.Parallel()
 
-	var logs syncBuffer
-
 	srv, err := server.NewWithIntrospector(
 		config.Config{
 			Driver:       database.DriverPostgres,
@@ -440,7 +440,6 @@ func TestServerRunReturnsListenFailure(t *testing.T) {
 		},
 		stubDB,
 		stubIntrospector{},
-		&logs,
 	)
 	if err != nil {
 		t.Fatalf("server.NewWithIntrospector: %v", err)
@@ -451,9 +450,8 @@ func TestServerRunReturnsListenFailure(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // captureLogs mutates the process-wide slog default.
 func TestServerRunGracefulShutdown(t *testing.T) {
-	t.Parallel()
-
 	var lc net.ListenConfig
 
 	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -463,7 +461,7 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 
 	addr := ln.Addr().String()
 
-	var logs syncBuffer
+	logs := captureLogs(t)
 
 	srv, err := server.NewWithIntrospector(
 		config.Config{
@@ -474,7 +472,6 @@ func TestServerRunGracefulShutdown(t *testing.T) {
 		},
 		stubDB,
 		stubIntrospector{},
-		&logs,
 	)
 	if err != nil {
 		t.Fatalf("server.NewWithIntrospector: %v", err)
@@ -609,7 +606,6 @@ func TestServerAppliesAuthToken(t *testing.T) {
 		},
 		stubDB,
 		stubIntrospector{},
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("server.NewWithIntrospector: %v", err)
@@ -677,8 +673,6 @@ func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
 		},
 	}
 
-	var logs syncBuffer
-
 	srv, err := server.NewWithIntrospector(
 		config.Config{
 			Driver:       database.DriverPostgres,
@@ -688,7 +682,6 @@ func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
 		},
 		stubDB,
 		stubIntrospector{schema: sch},
-		&logs,
 	)
 	if err != nil {
 		t.Fatalf("NewWithIntrospector: %v", err)
