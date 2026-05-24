@@ -341,9 +341,12 @@ func parseUpdateBody(body []byte) (map[string]any, error) {
 
 // decodeJSONWithNumber decodes body into target with UseNumber() set so JSON
 // numbers materialize as json.Number instead of float64 (see parseInsertBody
-// for the precision rationale). After the first value is consumed, any
-// remaining non-whitespace content is rejected so trailing data like
-// `{"a":1} junk` or `{"a":1}{"b":2}` cannot slip past the handler.
+// for the precision rationale). After the first value is consumed, a probe
+// Decode must return io.EOF; anything else (a second JSON value, trailing
+// junk, etc.) is rejected so callers like `{"a":1} junk` or
+// `{"a":1}{"b":2}` cannot slip past the handler. dec.More() is defined
+// against the current array/object state, so it is unreliable for the
+// top-level trailing-data check.
 func decodeJSONWithNumber(body []byte, target any) error {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
@@ -352,7 +355,8 @@ func decodeJSONWithNumber(body []byte, target any) error {
 		return fmt.Errorf("decode: %w", err)
 	}
 
-	if dec.More() {
+	var trailing json.RawMessage
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return errors.New("decode: unexpected data after JSON value")
 	}
 
