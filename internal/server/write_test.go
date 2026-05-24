@@ -372,8 +372,8 @@ func TestPost_RejectsBodyOver10MiB(t *testing.T) {
 	}
 }
 
-func TestPost_RepresentationUnsupportedOnMySQL(t *testing.T) {
-	t.Parallel()
+func newMySQLTestServer(t *testing.T, sch schema.Schema) *httptest.Server {
+	t.Helper()
 
 	var logs syncBuffer
 
@@ -385,7 +385,7 @@ func TestPost_RepresentationUnsupportedOnMySQL(t *testing.T) {
 			MaxLimit:     1000,
 		},
 		stubDB,
-		stubIntrospector{schema: usersSchema()},
+		stubIntrospector{schema: sch},
 		&logs,
 	)
 	if err != nil {
@@ -399,31 +399,212 @@ func TestPost_RepresentationUnsupportedOnMySQL(t *testing.T) {
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		ts.URL+"/users", strings.NewReader(`{"id":1,"name":"alice"}`))
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
+	return ts
+}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Prefer", "return=representation")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("POST: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Errorf("status = %d, want 501", resp.StatusCode)
-	}
+func assertProblemType(t *testing.T, resp *http.Response, wantSuffix string) {
+	t.Helper()
 
 	var p server.Problem
 	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 
-	if !strings.HasSuffix(p.Type, "unsupported") {
-		t.Errorf("Problem.Type = %q, want suffix %q", p.Type, "unsupported")
+	if !strings.HasSuffix(p.Type, wantSuffix) {
+		t.Errorf("Problem.Type = %q, want suffix %q", p.Type, wantSuffix)
+	}
+}
+
+func httpRequestWithHeaders(t *testing.T, method, url, body string, headers map[string]string) *http.Response {
+	t.Helper()
+
+	var rdr io.Reader
+	if body != "" {
+		rdr = strings.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), method, url, rdr)
+	if err != nil {
+		t.Fatalf("new request %s %s: %v", method, url, err)
+	}
+
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+
+	return resp
+}
+
+func TestWrite_RepresentationUnsupportedOnMySQL(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"POST", http.MethodPost, "/users", `{"id":1,"name":"alice"}`},
+		{"PATCH", http.MethodPatch, "/users?id=eq.1", `{"name":"alice2"}`},
+		{"DELETE", http.MethodDelete, "/users?id=eq.1", ""},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ts := newMySQLTestServer(t, usersSchema())
+
+			resp := httpRequestWithHeaders(t, tt.method, ts.URL+tt.path, tt.body,
+				map[string]string{"Prefer": "return=representation"})
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusNotImplemented {
+				t.Errorf("status = %d, want 501", resp.StatusCode)
+			}
+
+			assertProblemType(t, resp, "unsupported")
+		})
+	}
+}
+
+func TestPatch_RejectsBodyOver10MiB(t *testing.T) {
+	t.Parallel()
+
+	ts, _ := newTestServer(t, usersSchema())
+
+	big := strings.Repeat("a", (10<<20)+1)
+
+	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users?id=eq.1", big)
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want 413", resp.StatusCode)
+	}
+
+	assertProblemType(t, resp, "body-too-large")
+}
+
+func TestPatch_RejectsInvalidQuery(t *testing.T) {
+	t.Parallel()
+
+	ts, _ := newTestServer(t, usersSchema())
+
+	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users?id=bogus.42", `{"name":"x"}`)
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+
+	assertProblemType(t, resp, "invalid-query")
+}
+
+func TestPatch_RejectsUnknownColumnInBody(t *testing.T) {
+	t.Parallel()
+
+	ts, _ := newTestServer(t, usersSchema())
+
+	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users?id=eq.1", `{"ghost":"value"}`)
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !bytes.Contains(body, []byte("ghost")) {
+		t.Errorf("body = %s, want it to mention column name", body)
+	}
+}
+
+func TestDelete_RejectsInvalidQuery(t *testing.T) {
+	t.Parallel()
+
+	ts, _ := newTestServer(t, usersSchema())
+
+	resp := httpRequest(t, http.MethodDelete, ts.URL+"/users?id=bogus.42", "")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+
+	assertProblemType(t, resp, "invalid-query")
+}
+
+func TestDelete_RejectsUnknownColumnInFilter(t *testing.T) {
+	t.Parallel()
+
+	ts, _ := newTestServer(t, usersSchema())
+
+	resp := httpRequest(t, http.MethodDelete, ts.URL+"/users?ghost=eq.1", "")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !bytes.Contains(body, []byte("ghost")) {
+		t.Errorf("body = %s, want it to mention column name", body)
+	}
+}
+
+func TestParseInsertBody_Errors(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"empty body", ""},
+		{"whitespace only", "   "},
+		{"invalid JSON array", "[not-json"},
+		{"null inside array", "[null]"},
+		{"null root", "null"},
+		{"invalid JSON object", "{not-json"},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := server.ParseInsertBody([]byte(tt.body)); err == nil {
+				t.Errorf("expected error, got nil for %q", tt.body)
+			}
+		})
+	}
+}
+
+func TestParseUpdateBody_Errors(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"invalid JSON", "{not-json"},
+		{"null root", "null"},
+		{"empty object", "{}"},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, err := server.ParseUpdateBody([]byte(tt.body)); err == nil {
+				t.Errorf("expected error, got nil for %q", tt.body)
+			}
+		})
 	}
 }

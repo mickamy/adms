@@ -306,6 +306,46 @@ func TestWriteHandlerPostgres_DeleteRepresentation(t *testing.T) {
 	})
 }
 
+func TestWriteHandlerPostgres_DBErrorReturns500(t *testing.T) {
+	t.Parallel()
+
+	writeFixturePostgres(t, func(c testCtx) {
+		// Close the DB after the server has finished introspection. Subsequent
+		// QueryContext / ExecContext calls fail, exercising executeWrite's
+		// error paths (covering both the representation and minimal branches).
+		_ = c.db.Close()
+
+		cases := []struct {
+			name    string
+			method  string
+			path    string
+			body    string
+			headers map[string]string
+		}{
+			{
+				"POST minimal", http.MethodPost, "/" + c.table,
+				`{"id":1,"name":"alice","active":true}`, nil,
+			},
+			{
+				"PATCH representation", http.MethodPatch, "/" + c.table + "?id=eq.1",
+				`{"name":"x"}`, map[string]string{"Prefer": "return=representation"},
+			},
+		}
+
+		for _, tt := range cases {
+			t.Run(tt.name, func(t *testing.T) {
+				resp := c.request(tt.method, tt.path, tt.body, tt.headers)
+				defer func() { _ = resp.Body.Close() }()
+
+				if resp.StatusCode != http.StatusInternalServerError {
+					body, _ := io.ReadAll(resp.Body)
+					t.Errorf("status = %d, want 500; body = %s", resp.StatusCode, body)
+				}
+			})
+		}
+	})
+}
+
 func TestWriteHandlerPostgres_DeleteMinimalCountExact(t *testing.T) {
 	t.Parallel()
 

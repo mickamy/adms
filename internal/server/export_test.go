@@ -35,6 +35,8 @@ var (
 	FilterAllowedTables  = filterAllowedTables
 	ParsePrefer          = parsePrefer
 	ContentRangeReturned = contentRangeReturned
+	ParseInsertBody      = parseInsertBody
+	ParseUpdateBody      = parseUpdateBody
 )
 
 const ProblemTypePrefix = problemTypePrefix
