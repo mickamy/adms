@@ -3,6 +3,7 @@ package logger_test
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -106,6 +107,32 @@ func TestCapture_RestoresPreviousDefault(t *testing.T) {
 
 	if containsLogMsg(t, second.String(), "after nested capture") {
 		t.Errorf("second buf should not receive logs after its capture ended: %s", second.String())
+	}
+}
+
+//nolint:paralleltest // Direct slog.SetDefault swap to install a level filter.
+func TestPackageHelpers_BelowLevelShortCircuits(t *testing.T) {
+	var buf bytes.Buffer
+
+	prev := slog.Default()
+	slog.SetDefault(logger.New(&buf, "warn"))
+
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	logger.Debug(t.Context(), "skipped-debug")
+	logger.Info(t.Context(), "skipped-info")
+	logger.Warn(t.Context(), "kept-warn")
+
+	if containsLogMsg(t, buf.String(), "skipped-debug") {
+		t.Errorf("debug record leaked at warn level: %s", buf.String())
+	}
+
+	if containsLogMsg(t, buf.String(), "skipped-info") {
+		t.Errorf("info record leaked at warn level: %s", buf.String())
+	}
+
+	if !containsLogMsg(t, buf.String(), "kept-warn") {
+		t.Errorf("warn record missing: %s", buf.String())
 	}
 }
 
