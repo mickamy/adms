@@ -55,9 +55,22 @@ func parsePrefer(h http.Header) preferDirective {
 	return p
 }
 
+// Handler ordering note: validate Prefer / filter / read_only gates BEFORE
+// reading the request body. http.MaxBytesReader still allocates up to
+// maxRequestBodyBytes on a fast client, so rejecting on headers / query
+// first keeps a flood of unsupported requests from forcing the server to
+// pull 10 MiB per request.
+
 func (s *Server) insert(w http.ResponseWriter, r *http.Request) {
 	table, ok := s.resolveWriteTarget(w, r)
 	if !ok {
+		return
+	}
+
+	pref := parsePrefer(r.Header)
+	wantRet := pref.Return == preferReturnRepresentation
+
+	if !s.requireReturningSupport(w, r, wantRet, "insert") {
 		return
 	}
 
@@ -71,13 +84,6 @@ func (s *Server) insert(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, s.logger, http.StatusBadRequest,
 			"invalid-body", "Invalid body", err.Error())
 
-		return
-	}
-
-	pref := parsePrefer(r.Header)
-	wantRet := pref.Return == preferReturnRepresentation
-
-	if !s.requireReturningSupport(w, r, wantRet, "insert") {
 		return
 	}
 
@@ -101,16 +107,10 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, ok := s.readJSONBody(w, r)
-	if !ok {
-		return
-	}
+	pref := parsePrefer(r.Header)
+	wantRet := pref.Return == preferReturnRepresentation
 
-	set, err := parseUpdateBody(body)
-	if err != nil {
-		writeProblem(w, r, s.logger, http.StatusBadRequest,
-			"invalid-body", "Invalid body", err.Error())
-
+	if !s.requireReturningSupport(w, r, wantRet, "update") {
 		return
 	}
 
@@ -127,10 +127,16 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pref := parsePrefer(r.Header)
-	wantRet := pref.Return == preferReturnRepresentation
+	body, ok := s.readJSONBody(w, r)
+	if !ok {
+		return
+	}
 
-	if !s.requireReturningSupport(w, r, wantRet, "update") {
+	set, err := parseUpdateBody(body)
+	if err != nil {
+		writeProblem(w, r, s.logger, http.StatusBadRequest,
+			"invalid-body", "Invalid body", err.Error())
+
 		return
 	}
 
@@ -159,6 +165,13 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pref := parsePrefer(r.Header)
+	wantRet := pref.Return == preferReturnRepresentation
+
+	if !s.requireReturningSupport(w, r, wantRet, "delete") {
+		return
+	}
+
 	q, ok := s.parseFilter(w, r)
 	if !ok {
 		return
@@ -169,13 +182,6 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 			"unfiltered-write", "Unfiltered write",
 			"DELETE requires at least one filter to avoid removing every row")
 
-		return
-	}
-
-	pref := parsePrefer(r.Header)
-	wantRet := pref.Return == preferReturnRepresentation
-
-	if !s.requireReturningSupport(w, r, wantRet, "delete") {
 		return
 	}
 
