@@ -12,10 +12,16 @@ import (
 
 // Select converts a parsed Query against the given table into a SELECT
 // statement, bound arguments, and the list of result columns that hold
-// JSON payloads from embedded subqueries (so the caller can json.Unmarshal
-// them before serialising each row). It validates that every referenced
-// identifier exists on the table (select / filter / order) before emitting
-// SQL, so callers can rely on a fully sanitized statement.
+// JSON payloads from embedded subqueries. Those columns must be preserved
+// as raw JSON (e.g., json.RawMessage) rather than decoded into `any`,
+// because Go's default JSON unmarshal coerces numbers to float64 and
+// quietly loses precision for BIGINT identifiers — defeating the point of
+// the JSON_AGG / JSON_OBJECT round-trip. Use json.Decoder.UseNumber() or
+// typed structs if the caller really must inspect the contents.
+//
+// It validates that every referenced identifier exists on the table
+// (select / filter / order) before emitting SQL, so callers can rely on a
+// fully sanitized statement.
 //
 // lookup resolves the target table of an embedded relation
 // (e.g., "*,posts(id,title)" needs to find "posts"). It may be nil when
