@@ -12,7 +12,10 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("DELETE /{table}", s.delete)
 
 	// logging wraps recoverer so panics still produce an access-log line.
-	// auth sits inside both so 401 responses are logged and panics in the auth
-	// middleware itself are still caught.
-	return logging(s.logger, recoverer(s.logger, authBearer(s.logger, s.authToken, mux)))
+	// cors sits outside authBearer so OPTIONS preflight, which carries no
+	// Authorization header, can be answered without tripping the auth gate.
+	return logging(s.logger,
+		recoverer(s.logger,
+			cors(s.corsOrigins,
+				authBearer(s.logger, s.authToken, mux))))
 }
