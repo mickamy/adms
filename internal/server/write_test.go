@@ -3,12 +3,16 @@ package server_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mickamy/adms/internal/config"
 	"github.com/mickamy/adms/internal/database"
@@ -702,6 +706,87 @@ func TestParseUpdateBody_PreservesNumberPrecision(t *testing.T) {
 
 	if string(n) != "9999999999999999999" {
 		t.Errorf("count = %q, want preserved digits", string(n))
+	}
+}
+
+func TestClassifyDBError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		err            error
+		wantStatus     int
+		wantTypeSuffix string
+	}{
+		{
+			name:           "unknown error falls back to 500",
+			err:            errors.New("boom"),
+			wantStatus:     http.StatusInternalServerError,
+			wantTypeSuffix: "db-error",
+		},
+		{
+			name:           "pg unique violation maps to 409",
+			err:            &pgconn.PgError{Code: "23505", Message: "duplicate key"},
+			wantStatus:     http.StatusConflict,
+			wantTypeSuffix: "constraint-violation",
+		},
+		{
+			name:           "pg foreign key violation maps to 409",
+			err:            &pgconn.PgError{Code: "23503", Message: "fk fail"},
+			wantStatus:     http.StatusConflict,
+			wantTypeSuffix: "constraint-violation",
+		},
+		{
+			name:           "pg data exception maps to 400",
+			err:            &pgconn.PgError{Code: "22P02", Message: "invalid input"},
+			wantStatus:     http.StatusBadRequest,
+			wantTypeSuffix: "invalid-data",
+		},
+		{
+			name:           "pg unknown class falls back to 500",
+			err:            &pgconn.PgError{Code: "42601", Message: "syntax error"},
+			wantStatus:     http.StatusInternalServerError,
+			wantTypeSuffix: "db-error",
+		},
+		{
+			name:           "mysql dup entry maps to 409",
+			err:            &mysql.MySQLError{Number: 1062, Message: "duplicate"},
+			wantStatus:     http.StatusConflict,
+			wantTypeSuffix: "constraint-violation",
+		},
+		{
+			name:           "mysql foreign key violation maps to 409",
+			err:            &mysql.MySQLError{Number: 1452, Message: "fk fail"},
+			wantStatus:     http.StatusConflict,
+			wantTypeSuffix: "constraint-violation",
+		},
+		{
+			name:           "mysql not-null violation maps to 400",
+			err:            &mysql.MySQLError{Number: 1048, Message: "null"},
+			wantStatus:     http.StatusBadRequest,
+			wantTypeSuffix: "invalid-data",
+		},
+		{
+			name:           "mysql other error falls back to 500",
+			err:            &mysql.MySQLError{Number: 1146, Message: "no such table"},
+			wantStatus:     http.StatusInternalServerError,
+			wantTypeSuffix: "db-error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			status, typeSuffix, _, _ := server.ClassifyDBError(tt.err)
+			if status != tt.wantStatus {
+				t.Errorf("status = %d, want %d", status, tt.wantStatus)
+			}
+
+			if typeSuffix != tt.wantTypeSuffix {
+				t.Errorf("typeSuffix = %q, want %q", typeSuffix, tt.wantTypeSuffix)
+			}
+		})
 	}
 }
 

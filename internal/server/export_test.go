@@ -37,6 +37,7 @@ var (
 	ContentRangeReturned = contentRangeReturned
 	ParseInsertBody      = parseInsertBody
 	ParseUpdateBody      = parseUpdateBody
+	ClassifyDBError      = classifyDBError
 )
 
 const ProblemTypePrefix = problemTypePrefix

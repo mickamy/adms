@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/mickamy/adms/internal/build"
 	"github.com/mickamy/adms/internal/query"
 	"github.com/mickamy/adms/internal/schema"
@@ -445,7 +448,39 @@ func (s *Server) writeDBError(w http.ResponseWriter, r *http.Request, err error,
 	fmt.Fprintf(s.logger, "adms: %s %s %s: %v\n",
 		action, r.Method, r.URL.EscapedPath(), err)
 
-	writeProblem(w, r, s.logger, http.StatusInternalServerError,
-		"db-error", "Database error",
-		"the database refused or failed to execute the statement")
+	status, typeSuffix, title, detail := classifyDBError(err)
+	writeProblem(w, r, s.logger, status, typeSuffix, title, detail)
+}
+
+// classifyDBError maps driver-typed errors to HTTP responses. Unique /
+// foreign-key / not-null / check violations become 409 (the change
+// conflicts with existing data); explicit data-type errors become 400.
+// Anything we cannot classify falls back to 500 with a generic message so
+// internal schema details don't leak through the response body.
+func classifyDBError(err error) (status int, typeSuffix, title, detail string) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		switch class := pgErr.Code[:2]; class {
+		case "23": // integrity_constraint_violation
+			return http.StatusConflict, "constraint-violation", "Constraint violation",
+				"the request conflicts with a database constraint"
+		case "22": // data_exception
+			return http.StatusBadRequest, "invalid-data", "Invalid data",
+				"a value in the request cannot be coerced to the column's type"
+		}
+	}
+
+	if myErr, ok := errors.AsType[*mysql.MySQLError](err); ok {
+		switch myErr.Number {
+		case 1062, // ER_DUP_ENTRY
+			1216, 1217, 1451, 1452: // foreign-key violations
+			return http.StatusConflict, "constraint-violation", "Constraint violation",
+				"the request conflicts with a database constraint"
+		case 1048: // ER_BAD_NULL_ERROR
+			return http.StatusBadRequest, "invalid-data", "Invalid data",
+				"a NOT NULL column was set to null"
+		}
+	}
+
+	return http.StatusInternalServerError, "db-error", "Database error",
+		"the database refused or failed to execute the statement"
 }
