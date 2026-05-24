@@ -1,6 +1,7 @@
 package build_test
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -104,5 +105,24 @@ func TestDelete_Errors(t *testing.T) {
 		d, false)
 	if err == nil {
 		t.Errorf("Delete: expected error, got nil")
+	}
+}
+
+func TestDelete_FilterErrorWrapsBuildWhereFailures(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+	table := usersTable()
+
+	_, _, err := build.Delete(table,
+		query.Query{Filter: query.Predicate{Column: "ghost", Op: query.OpEq, Value: "1"}},
+		d, false)
+	if err == nil {
+		t.Fatal("Delete: expected error, got nil")
+	}
+
+	var fe *build.FilterError
+	if !errors.As(err, &fe) {
+		t.Errorf("error %v should wrap *build.FilterError so handlers can map it to invalid-query", err)
 	}
 }

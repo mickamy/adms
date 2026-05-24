@@ -190,8 +190,13 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 
 	stmt, args, err := build.Delete(table, q, s.dialect, wantRet)
 	if err != nil {
+		typeSuffix, title := "invalid-body", "Invalid body"
+		if _, ok := errors.AsType[*build.FilterError](err); ok {
+			typeSuffix, title = "invalid-query", "Invalid query"
+		}
+
 		writeProblem(w, r, s.logger, http.StatusBadRequest,
-			"invalid-query", "Invalid query", err.Error())
+			typeSuffix, title, err.Error())
 
 		return
 	}
