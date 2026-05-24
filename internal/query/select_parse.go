@@ -74,7 +74,10 @@ func parseSelectItem(s string) (SelectItem, error) {
 			return SelectItem{}, fmt.Errorf("empty relation name in %q", s)
 		}
 
-		if strings.ContainsAny(relation, " \t():,") {
+		// ':' is the alias separator at the grammar level; allowing it inside a
+		// relation name would let "a:b:users(id)" parse as relation "b:users"
+		// and surface as a confusing "unknown relation" error downstream.
+		if strings.ContainsAny(relation, " \t():,:") {
 			return SelectItem{}, fmt.Errorf("invalid relation name %q", relation)
 		}
 

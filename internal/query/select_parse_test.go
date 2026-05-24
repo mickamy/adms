@@ -154,6 +154,7 @@ func TestSelect_Error(t *testing.T) {
 		{"unmatched open paren in embed", "posts(id,title", "unmatched"},
 		{"unmatched close paren in embed", "posts(id))", "unmatched"},
 		{"relation name with space", "po sts(id)", "invalid relation name"},
+		{"relation name with colon", "a:b:users(id)", "invalid relation name"},
 	}
 
 	for _, tt := range tests {
