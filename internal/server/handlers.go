@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -135,37 +136,41 @@ func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error)
 	return result, nil
 }
 
-// decodeEmbedValue turns the driver-returned bytes/string of an embed
-// subquery back into a Go map or slice so the surrounding JSON encoder emits
-// a nested object/array rather than a quoted JSON string. SQL NULL (no
-// related rows on a many-to-one embed) and empty payloads are preserved as
-// Go nil — both legitimate JSON values, hence the deliberate (nil, nil)
-// return.
+// decodeEmbedValue wraps the driver-returned bytes/string of an embed
+// subquery in a json.RawMessage so the surrounding JSON encoder emits a
+// nested object/array verbatim. This preserves BIGINT precision that a
+// round-trip through `any` (float64) would corrupt, and skips a redundant
+// parse + re-encode pass. SQL NULL and empty payloads collapse to Go nil,
+// which encoding/json then writes as JSON null.
 func decodeEmbedValue(v any) (any, error) {
 	if v == nil {
 		return nil, nil //nolint:nilnil // SQL NULL → JSON null
 	}
 
-	var raw []byte
+	var src []byte
 	switch x := v.(type) {
 	case []byte:
-		raw = x
+		src = x
 	case string:
-		raw = []byte(x)
+		src = []byte(x)
 	default:
 		return v, nil
 	}
 
-	if len(raw) == 0 {
+	if len(src) == 0 {
 		return nil, nil //nolint:nilnil // empty embed payload → JSON null
 	}
 
-	var parsed any
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil, fmt.Errorf("unmarshal: %w", err)
+	if !json.Valid(src) {
+		return nil, errors.New("embed payload is not valid JSON")
 	}
 
-	return parsed, nil
+	// database/sql reuses the underlying scan buffer between iterations,
+	// so a slice we keep in the row map must be copied first.
+	raw := make([]byte, len(src))
+	copy(raw, src)
+
+	return json.RawMessage(raw), nil
 }
 
 // normalizeScanValue makes driver-returned values JSON-friendly. The MySQL
