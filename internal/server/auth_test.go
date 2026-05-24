@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/mickamy/adms/internal/server"
@@ -39,9 +40,9 @@ func TestAuthBearer_AcceptsValidToken(t *testing.T) {
 
 	const token = "s3cret"
 
-	called := false
+	var called atomic.Bool
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		called = true
+		called.Store(true)
 
 		w.WriteHeader(http.StatusOK)
 	})
@@ -63,7 +64,7 @@ func TestAuthBearer_AcceptsValidToken(t *testing.T) {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
 
-	if !called {
+	if !called.Load() {
 		t.Error("next handler was not invoked despite valid token")
 	}
 }
@@ -194,9 +195,9 @@ func TestAuthBearer_RejectsWrongScheme(t *testing.T) {
 func TestAuthBearer_HealthzBypassesAuth(t *testing.T) {
 	t.Parallel()
 
-	called := false
+	var called atomic.Bool
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		called = true
+		called.Store(true)
 
 		_, _ = io.WriteString(w, "ok")
 	})
@@ -211,7 +212,7 @@ func TestAuthBearer_HealthzBypassesAuth(t *testing.T) {
 		t.Errorf("status = %d, want 200 (/healthz must bypass auth)", resp.StatusCode)
 	}
 
-	if !called {
+	if !called.Load() {
 		t.Error("/healthz did not reach the next handler")
 	}
 }
