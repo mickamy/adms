@@ -193,6 +193,19 @@ func TestRowViewRenders(t *testing.T) {
 	}
 }
 
+func TestRowViewUnknownTableReturns404(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/ghost/r/1")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
 func TestRowViewMultiPKShowsUnsupported(t *testing.T) {
 	t.Parallel()
 
