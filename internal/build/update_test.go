@@ -1,6 +1,7 @@
 package build_test
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -143,5 +144,45 @@ func TestUpdate_Errors(t *testing.T) {
 				t.Errorf("Update: expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestUpdate_FilterErrorWrapsBuildWhereFailures(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+	table := usersTable()
+
+	_, _, err := build.Update(table,
+		map[string]any{"name": "alice2"},
+		query.Query{Filter: query.Predicate{Column: "ghost", Op: query.OpEq, Value: "1"}},
+		d, false)
+	if err == nil {
+		t.Fatal("Update: expected error, got nil")
+	}
+
+	var fe *build.FilterError
+	if !errors.As(err, &fe) {
+		t.Errorf("error %v should wrap *build.FilterError so handlers can map it to invalid-query", err)
+	}
+}
+
+func TestUpdate_BodyErrorIsNotFilterError(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+	table := usersTable()
+
+	_, _, err := build.Update(table,
+		map[string]any{"ghost": "value"},
+		query.Query{},
+		d, false)
+	if err == nil {
+		t.Fatal("Update: expected error, got nil")
+	}
+
+	var fe *build.FilterError
+	if errors.As(err, &fe) {
+		t.Errorf("SET-column failure should not wrap *build.FilterError; got %v", err)
 	}
 }

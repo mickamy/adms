@@ -58,7 +58,7 @@ func Update(
 	if q.Filter != nil {
 		where, err := buildWhere(q.Filter, t, d, colSet, &args)
 		if err != nil {
-			return "", nil, err
+			return "", nil, &FilterError{Err: err}
 		}
 
 		b.WriteString(" WHERE ")

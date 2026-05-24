@@ -521,10 +521,24 @@ func TestPatch_RejectsUnknownColumnInBody(t *testing.T) {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	if !bytes.Contains(body, []byte("ghost")) {
-		t.Errorf("body = %s, want it to mention column name", body)
+	assertProblemType(t, resp, "invalid-body")
+}
+
+func TestPatch_RejectsUnknownColumnInFilter(t *testing.T) {
+	t.Parallel()
+
+	ts, _ := newTestServer(t, usersSchema())
+
+	// Valid SET body, but the filter references an unknown column. build.Update
+	// surfaces a *build.FilterError; the handler must map that to invalid-query.
+	resp := httpRequest(t, http.MethodPatch, ts.URL+"/users?ghost=eq.1", `{"name":"alice2"}`)
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
+
+	assertProblemType(t, resp, "invalid-query")
 }
 
 func TestDelete_RejectsInvalidQuery(t *testing.T) {

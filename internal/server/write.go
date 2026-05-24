@@ -136,8 +136,13 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request) {
 
 	stmt, args, err := build.Update(table, set, q, s.dialect, wantRet)
 	if err != nil {
+		typeSuffix, title := "invalid-body", "Invalid body"
+		if _, ok := errors.AsType[*build.FilterError](err); ok {
+			typeSuffix, title = "invalid-query", "Invalid query"
+		}
+
 		writeProblem(w, r, s.logger, http.StatusBadRequest,
-			"invalid-body", "Invalid body", err.Error())
+			typeSuffix, title, err.Error())
 
 		return
 	}
