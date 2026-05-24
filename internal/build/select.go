@@ -10,31 +10,16 @@ import (
 	"github.com/mickamy/adms/internal/schema"
 )
 
-// Select converts a parsed Query against the given table into a SELECT
-// statement, bound arguments, and the list of result columns that hold
-// JSON payloads from embedded subqueries. Those columns must be preserved
-// as raw JSON (e.g., json.RawMessage) rather than decoded into `any`,
-// because Go's default JSON unmarshal coerces numbers to float64 and
-// quietly loses precision for BIGINT identifiers — defeating the point of
-// the JSON_AGG / JSON_OBJECT round-trip. Use json.Decoder.UseNumber() or
-// typed structs if the caller really must inspect the contents.
+// Select compiles a parsed Query into a SELECT statement, bound args, and
+// the list of result-column aliases that carry embedded JSON payloads. The
+// caller should keep those alias columns as raw JSON (e.g. json.RawMessage);
+// `any`-typed unmarshal coerces numbers to float64 and loses BIGINT
+// precision, defeating the JSON_AGG / JSON_OBJECT round-trip.
 //
-// It validates that every referenced identifier exists on the table
-// (select / filter / order) before emitting SQL, so callers can rely on a
-// fully sanitized statement.
-//
-// lookup resolves the target table of an embedded relation
-// (e.g., "*,posts(id,title)" needs to find "posts"). It may be nil when
-// q.Select contains no embeds; if any embed is present and lookup is nil,
-// Select returns an error.
-//
-// Limit handling: q.Limit is clamped to [1, maxLimit]; nil falls back to
-// defaultLimit. Offset defaults to 0. Both are emitted as literal integers
-// since the parser validates them as non-negative ints.
-//
-// defaultLimit and maxLimit must both be positive, and defaultLimit must
-// not exceed maxLimit; otherwise Select returns an error without inspecting
-// the rest of the query.
+// Identifiers in select / filter / order are validated against the table.
+// lookup resolves embed targets and may be nil only when q.Select has no
+// embed. limit is clamped to [1, maxLimit]; nil falls back to defaultLimit.
+// defaultLimit and maxLimit must be positive with defaultLimit ≤ maxLimit.
 func Select(
 	q query.Query,
 	t *schema.Table,

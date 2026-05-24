@@ -29,15 +29,10 @@ type relation struct {
 	childKeys  []string // columns on the child table participating in the join
 }
 
-// resolveRelation finds a foreign-key path between parent and child. It first
-// checks whether the parent itself has an FK pointing at child (many-to-one),
-// and otherwise looks for an FK on child that points back at parent
-// (one-to-many). Multiple FKs between the same pair are reported as
-// ambiguous so the operator can disambiguate with explicit syntax later.
-//
-// ForeignKey.Table is populated by the schema introspector with a
-// "schema.name" qualified name (see schema.qualify), so we compare against
-// the same qualified form rather than just Table.Name.
+// resolveRelation picks the FK between parent and child — many-to-one when
+// the parent holds it, one-to-many when the child does — or errors on no
+// match or multiple candidates. Comparison uses the qualified "schema.name"
+// form since that is how the introspector populates ForeignKey.Table.
 func resolveRelation(parent, child *schema.Table) (relation, error) {
 	parentQual := qualifiedTableName(parent)
 	childQual := qualifiedTableName(child)
@@ -97,10 +92,8 @@ func qualifiedTableName(t *schema.Table) string {
 	return t.Schema + "." + t.Name
 }
 
-// childOrderBy renders the child table's primary key as a comma-separated
-// list of fully qualified column references, e.g. `"posts"."id"`. It returns
-// an empty string when the child has no declared primary key — embeds on
-// such tables stay in whatever order the engine picks.
+// childOrderBy returns the child PK as `"table"."col", ...` for ORDER BY,
+// or "" when the child has no declared PK.
 func childOrderBy(t *schema.Table, d dialect.Dialect) string {
 	if len(t.PrimaryKey) == 0 {
 		return ""
@@ -193,8 +186,6 @@ func buildEmbedSubquery(
 	return sub + " AS " + d.Quote(alias), nil
 }
 
-// embedFieldNames produces the deduplicated, validated list of column names
-// to include in an embedded JSON object.
 func embedFieldNames(items []query.SelectItem, child *schema.Table) ([]string, error) {
 	childCols := columnSet(child)
 

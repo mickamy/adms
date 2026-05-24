@@ -94,9 +94,7 @@ func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error)
 		embedSet[a] = struct{}{}
 	}
 
-	// Allocate scan buffers once. rows.Scan overwrites values[i] each iteration
-	// and ptrs[i] keeps pointing at the same slot, so there is nothing to reset
-	// between rows.
+	// Reuse scan buffers across rows: rows.Scan overwrites values[i] in place.
 	values := make([]any, len(cols))
 	ptrs := make([]any, len(cols))
 
@@ -131,16 +129,9 @@ func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error)
 	return result, nil
 }
 
-// decodeEmbedValue wraps the driver-returned bytes/string of an embed
-// subquery in a json.RawMessage so the surrounding JSON encoder emits a
-// nested object/array verbatim. This preserves BIGINT precision that a
-// round-trip through `any` (float64) would corrupt, and skips a redundant
-// parse + re-encode pass. SQL NULL and empty payloads collapse to Go nil,
-// which encoding/json then writes as JSON null.
-//
-// The payload itself is trusted to be well-formed JSON because the SQL
-// builder emits it via json_build_object / JSON_OBJECT — re-validating per
-// row would just scan the same bytes twice for no gain.
+// decodeEmbedValue wraps the embed payload in a json.RawMessage so the
+// row's JSON encoder emits the nested object/array verbatim. Decoding into
+// `any` would coerce BIGINTs to float64 and silently lose precision.
 func decodeEmbedValue(v any) any {
 	if v == nil {
 		return nil
@@ -160,25 +151,18 @@ func decodeEmbedValue(v any) any {
 		return nil
 	}
 
-	// database/sql reuses the underlying scan buffer between iterations,
-	// so a slice we keep in the row map must be copied first.
+	// database/sql reuses scan buffers across iterations, so copy before
+	// retaining.
 	raw := make([]byte, len(src))
 	copy(raw, src)
 
 	return json.RawMessage(raw)
 }
 
-// normalizeScanValue makes driver-returned values JSON-friendly. The MySQL
-// driver returns text-typed columns as []byte; we convert valid UTF-8 byte
-// slices to string so encoding/json emits a normal JSON string. Non-UTF-8
-// payloads (binary / blob columns) are passed through as []byte so JSON
-// encoding produces a safe base64 representation rather than corrupting the
-// bytes by force-casting to string.
-//
-// database/sql guarantees the scanned []byte is only valid until the next
-// Scan call, so non-UTF-8 payloads are defensively copied. The UTF-8 branch
-// is safe without an explicit copy because Go's string conversion already
-// allocates a fresh backing array.
+// normalizeScanValue turns driver []byte (e.g., MySQL text columns) into a
+// JSON-friendly value: UTF-8 valid → string (a fresh allocation), otherwise
+// a copied []byte so encoding/json emits a safe base64 form and the scan
+// buffer reuse does not corrupt it.
 func normalizeScanValue(v any) any {
 	if b, ok := v.([]byte); ok {
 		if utf8.Valid(b) {
