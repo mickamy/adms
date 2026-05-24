@@ -542,9 +542,7 @@ func TestLoad_MissingFile(t *testing.T) {
 }
 
 func TestLoad_Examples(t *testing.T) {
-	// Cannot use t.Parallel() here: t.Setenv mutates process-wide env.
-
-	t.Setenv("ADMS_DSN", "postgres://example")
+	t.Parallel()
 
 	for _, path := range []string{
 		"../../examples/adms.yaml",
@@ -566,8 +564,8 @@ func assertExampleLoads(t *testing.T, path string) {
 		t.Errorf("[%s] Driver = %q, want %q", path, cfg.Driver, database.DriverPostgres)
 	}
 
-	if cfg.DSN != "postgres://example" {
-		t.Errorf("[%s] DSN = %q, want %q (env expansion failed)", path, cfg.DSN, "postgres://example")
+	if cfg.DSN == "" {
+		t.Errorf("[%s] DSN is empty", path)
 	}
 
 	if cfg.Listen != ":7777" {
@@ -580,6 +578,10 @@ func assertExampleLoads(t *testing.T, path string) {
 
 	if cfg.UI.Listen != ":7778" {
 		t.Errorf("[%s] UI.Listen = %q, want %q", path, cfg.UI.Listen, ":7778")
+	}
+
+	if !cfg.UI.Enabled {
+		t.Errorf("[%s] UI.Enabled = false, want true (example should opt into the UI)", path)
 	}
 }
 

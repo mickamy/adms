@@ -1,7 +1,5 @@
 driver: postgres
-# Secrets are read from environment variables via ${VAR} expansion.
-# Set ADMS_DSN (or any name you choose) in the environment before launching adms.
-dsn: "${ADMS_DSN}"
+dsn: "postgres://postgres:postgres@localhost:5433/adms_test?sslmode=disable"
 listen: ":7777"
 timeout: 30s
 read_only: false
@@ -10,16 +8,10 @@ allowed_schemas:
   - public
 allowed_tables: []
 
-# List the exact origins (scheme + host + port, no trailing slash) that may
-# call the API from a browser. Leave empty to skip CORS handling entirely.
-# Example: ["https://admin.example.com"].
 cors_origins: []
-# Set auth_token_env to the name of an environment variable that holds the
-# bearer token. adms then requires `Authorization: Bearer <token>` on every
-# request except /healthz. Leave empty to disable bearer auth.
 auth_token_env: ""
 log_level: info
 
 ui:
-  enabled: false
+  enabled: true
   listen: ":7778"

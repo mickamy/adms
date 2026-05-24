@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/mickamy/adms/internal/exit"
 	"github.com/mickamy/adms/internal/logger"
 	"github.com/mickamy/adms/internal/server"
+	"github.com/mickamy/adms/internal/ui"
 )
 
 func Run(args []string, _, stderr io.Writer) int {
@@ -59,6 +62,10 @@ func Run(args []string, _, stderr io.Writer) int {
 		return exit.Error
 	}
 
+	if cfg.UI.Enabled {
+		cfg.CORSOrigins = append(cfg.CORSOrigins, uiCORSOrigins(cfg.UI.Listen)...)
+	}
+
 	srv, err := server.New(cfg, db.DB)
 	if err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
@@ -66,9 +73,52 @@ func Run(args []string, _, stderr io.Writer) int {
 		return exit.Error
 	}
 
-	if err := srv.Run(sigCtx); err != nil {
+	if err := srv.Prepare(sigCtx); err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
+		return exit.Error
+	}
+
+	return runServers(sigCtx, cfg, srv, stderr)
+}
+
+// runServers drives the API server (and the UI server, when enabled) on
+// their own goroutines and returns the first error either reports, or
+// exit.OK if both exit cleanly after the shared context is cancelled.
+func runServers(ctx context.Context, cfg config.Config, apiSrv *server.Server, stderr io.Writer) int {
+	var wg sync.WaitGroup
+
+	errCh := make(chan error, 2)
+
+	wg.Go(func() {
+		if err := apiSrv.Run(ctx); err != nil {
+			errCh <- fmt.Errorf("api: %w", err)
+		}
+	})
+
+	if cfg.UI.Enabled {
+		uiSrv, err := ui.New(cfg, apiSrv.Schema(), apiOriginFromListen(cfg.Listen))
+		if err != nil {
+			fmt.Fprintf(stderr, "adms: %v\n", err)
+
+			return exit.Error
+		}
+
+		wg.Go(func() {
+			if err := uiSrv.Run(ctx); err != nil {
+				errCh <- err
+			}
+		})
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		fmt.Fprintf(stderr, "adms: %v\n", err)
+	}
+
+	if ctx.Err() == nil {
 		return exit.Error
 	}
 
@@ -137,6 +187,37 @@ func resolveAuthToken(cfg *config.Config) error {
 	cfg.AuthToken = tok
 
 	return nil
+}
+
+// uiCORSOrigins returns the browser origins from which the UI will reach
+// the API. Operators behind a reverse proxy with a custom host need to add
+// to cors_origins manually; this only covers the localhost-only case.
+func uiCORSOrigins(uiListen string) []string {
+	_, port, err := net.SplitHostPort(uiListen)
+	if err != nil || port == "" {
+		return nil
+	}
+
+	return []string{
+		"http://localhost:" + port,
+		"http://127.0.0.1:" + port,
+	}
+}
+
+// apiOriginFromListen turns a listen address into the origin the UI uses
+// for HTMX requests. Hosts that do not bind to localhost need a reverse
+// proxy or manual config; this helper covers the default :PORT case.
+func apiOriginFromListen(listen string) string {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil || port == "" {
+		return "http://localhost"
+	}
+
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 func pingDB(ctx context.Context, db *sql.DB, timeout time.Duration) error {

@@ -663,6 +663,45 @@ func TestServerAppliesAuthToken(t *testing.T) {
 	})
 }
 
+func TestServerSchemaAfterPrepare(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{Schema: "public", Name: "users", Columns: []schema.Column{{Name: "id"}}},
+			{Schema: "public", Name: "posts", Columns: []schema.Column{{Name: "id"}}},
+		},
+	}
+
+	srv, err := server.NewWithIntrospector(
+		config.Config{
+			Driver:       database.DriverPostgres,
+			Timeout:      time.Second,
+			DefaultLimit: 100,
+			MaxLimit:     1000,
+		},
+		stubDB,
+		stubIntrospector{schema: sch},
+	)
+	if err != nil {
+		t.Fatalf("NewWithIntrospector: %v", err)
+	}
+
+	if err := srv.Prepare(t.Context()); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	got := srv.Schema()
+	if len(got.Tables) != 2 || got.Tables[0].Name != "users" || got.Tables[1].Name != "posts" {
+		t.Errorf("Schema() = %+v, want users + posts", got)
+	}
+
+	// Second Prepare is a no-op because of sync.Once; Schema stays valid.
+	if err := srv.Prepare(t.Context()); err != nil {
+		t.Errorf("Prepare second call: %v", err)
+	}
+}
+
 func TestPrepareRejectsDuplicateTableNames(t *testing.T) {
 	t.Parallel()
 

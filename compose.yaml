@@ -7,6 +7,8 @@ services:
       POSTGRES_DB: adms_test
     ports:
       - "5433:5432"
+    volumes:
+      - ./compose/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d adms_test"]
       interval: 2s
@@ -20,6 +22,8 @@ services:
       MYSQL_DATABASE: adms_test
     ports:
       - "3307:3306"
+    volumes:
+      - ./compose/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -pmysql --silent"]
       interval: 2s
