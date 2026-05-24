@@ -111,8 +111,8 @@ func TestAuthBearer_RejectsMissingHeader(t *testing.T) {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
 	}
 
-	if got := resp.Header.Get("WWW-Authenticate"); !strings.HasPrefix(got, "Bearer") {
-		t.Errorf("WWW-Authenticate = %q, want Bearer challenge", got)
+	if got := resp.Header.Get("WWW-Authenticate"); !strings.Contains(got, `error="invalid_request"`) {
+		t.Errorf("WWW-Authenticate = %q, want invalid_request error (RFC 6750 §3)", got)
 	}
 
 	assertProblemJSON(t, resp, "unauthenticated", http.StatusUnauthorized)
@@ -187,6 +187,10 @@ func TestAuthBearer_RejectsWrongScheme(t *testing.T) {
 
 			if resp.StatusCode != http.StatusUnauthorized {
 				t.Errorf("status = %d, want 401", resp.StatusCode)
+			}
+
+			if got := resp.Header.Get("WWW-Authenticate"); !strings.Contains(got, `error="invalid_request"`) {
+				t.Errorf("WWW-Authenticate = %q, want invalid_request (malformed header)", got)
 			}
 		})
 	}

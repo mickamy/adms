@@ -31,7 +31,7 @@ func authBearer(out io.Writer, token string, next http.Handler) http.Handler {
 
 		got, ok := bearerToken(r.Header.Get("Authorization"))
 		if !ok {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="adms"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="adms", error="invalid_request"`)
 			writeProblem(w, r, out, http.StatusUnauthorized,
 				"unauthenticated", "Unauthenticated",
 				"request requires a Bearer token in the Authorization header")
