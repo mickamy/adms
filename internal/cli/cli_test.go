@@ -187,6 +187,73 @@ func TestRun_ResolvesAuthTokenFromEnv(t *testing.T) {
 	}
 }
 
+func TestUICORSOrigins(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		listen string
+		want   []string
+	}{
+		{"port only", ":7778", []string{"http://localhost:7778", "http://127.0.0.1:7778"}},
+		{"host:port", "127.0.0.1:8080", []string{"http://localhost:8080", "http://127.0.0.1:8080"}},
+		{"malformed empty", "", nil},
+		{"malformed no port", "localhost", nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := cli.UICORSOrigins(tc.listen)
+
+			if !equalStringSlices(got, tc.want) {
+				t.Errorf("UICORSOrigins(%q) = %v, want %v", tc.listen, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAPIOriginFromListen(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		listen string
+		want   string
+	}{
+		{"port only", ":7777", "http://localhost:7777"},
+		{"bind-all v4", "0.0.0.0:7777", "http://localhost:7777"},
+		{"bind-all v6", "[::]:7777", "http://localhost:7777"},
+		{"explicit host", "127.0.0.1:8000", "http://127.0.0.1:8000"},
+		{"malformed", "", "http://localhost"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := cli.APIOriginFromListen(tc.listen); got != tc.want {
+				t.Errorf("APIOriginFromListen(%q) = %q, want %q", tc.listen, got, tc.want)
+			}
+		})
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 func TestPrintUsage(t *testing.T) {
 	t.Parallel()
 

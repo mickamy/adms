@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/mickamy/adms/internal/config"
@@ -36,6 +37,9 @@ type Server struct {
 	schema     schema.Schema
 	schemaJSON []byte
 	tableIndex tableLookup
+
+	prepareOnce sync.Once
+	prepareErr  error
 }
 
 // tableLookup adapts the introspected table index to build.SchemaLookup so
@@ -111,7 +115,7 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	if err := s.prepare(ctx); err != nil {
+	if err := s.Prepare(ctx); err != nil {
 		return err
 	}
 
@@ -124,6 +128,20 @@ func (s *Server) Run(ctx context.Context) error {
 
 	return s.serve(ctx, ln)
 }
+
+// Prepare introspects the schema. It is idempotent — callers can invoke it
+// before Run so they can use Schema() before the listener starts.
+func (s *Server) Prepare(ctx context.Context) error {
+	s.prepareOnce.Do(func() {
+		s.prepareErr = s.prepare(ctx)
+	})
+
+	return s.prepareErr
+}
+
+// Schema returns the introspected, allowlist-filtered schema. It is only
+// valid after Prepare (or Run) returns nil.
+func (s *Server) Schema() schema.Schema { return s.schema }
 
 func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 	logger.Info(ctx, "listening", "addr", ln.Addr().String())

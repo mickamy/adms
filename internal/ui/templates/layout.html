@@ -1,0 +1,47 @@
+{{define "layout.html"}}<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="adms-api-origin" content="{{.APIOrigin}}">
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex">
+  <aside class="w-64 shrink-0 border-r border-zinc-800 p-4 overflow-y-auto h-screen sticky top-0">
+    <a href="/" class="block font-semibold text-zinc-100 mb-3">adms</a>
+    <input type="search" placeholder="Filter tables…"
+      class="w-full px-2 py-1 mb-3 rounded bg-zinc-900 border border-zinc-800 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-600"
+      oninput="filterTables(this.value)">
+    <nav>
+      <ul class="space-y-1 text-sm">
+        {{range .Tables}}
+        <li>
+          <a href="/t/{{.Name}}"
+            data-table-name="{{.Name}}"
+            class="block px-2 py-1 rounded hover:bg-zinc-800 {{if eq $.ActiveTable .Name}}bg-zinc-800 text-zinc-50{{else}}text-zinc-300{{end}}">
+            {{.Name}}
+            <span class="text-zinc-500 text-xs">{{.Schema}}</span>
+          </a>
+        </li>
+        {{else}}
+        <li class="text-zinc-500 text-sm">No tables exposed.</li>
+        {{end}}
+      </ul>
+    </nav>
+  </aside>
+  <main class="flex-1 p-6 overflow-x-auto">
+    {{if eq .ContentTmpl "content_index.html"}}{{template "content_index.html" .}}{{end}}
+    {{if eq .ContentTmpl "content_table.html"}}{{template "content_table.html" .}}{{end}}
+  </main>
+  <script>
+    function filterTables(q) {
+      const needle = q.toLowerCase();
+      document.querySelectorAll('[data-table-name]').forEach((a) => {
+        const name = a.dataset.tableName.toLowerCase();
+        a.parentElement.style.display = name.includes(needle) ? '' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>{{end}}
