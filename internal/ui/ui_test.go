@@ -145,6 +145,58 @@ func TestNewRequiresAPIOrigin(t *testing.T) {
 	}
 }
 
+func TestRunBindsAndShutsDown(t *testing.T) {
+	t.Parallel()
+
+	srv, err := ui.New(
+		config.Config{UI: config.UIConfig{Listen: "127.0.0.1:0"}},
+		sampleSchema(),
+		apiOrigin,
+	)
+	if err != nil {
+		t.Fatalf("ui.New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	done := make(chan error, 1)
+
+	go func() { done <- srv.Run(ctx) }()
+
+	// Give Run a moment to bind before we cancel; without this the listener
+	// may not have entered Serve yet and we would not be testing the
+	// graceful-shutdown path.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run() error = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return after context cancel")
+	}
+}
+
+func TestRunListenFailure(t *testing.T) {
+	t.Parallel()
+
+	srv, err := ui.New(
+		config.Config{UI: config.UIConfig{Listen: "127.0.0.1:99999"}},
+		sampleSchema(),
+		apiOrigin,
+	)
+	if err != nil {
+		t.Fatalf("ui.New: %v", err)
+	}
+
+	if err := srv.Run(t.Context()); err == nil {
+		t.Fatal("Run() error = nil, want non-nil for invalid addr")
+	}
+}
+
 func TestRunGracefulShutdown(t *testing.T) {
 	t.Parallel()
 
