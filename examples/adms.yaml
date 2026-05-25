@@ -9,7 +9,12 @@ allowed_schemas:
 allowed_tables: []
 
 cors_origins: []
+
+# Name of an env var holding the bearer token; an empty string disables
+# bearer auth. When ui.enabled is true, the UI auto-forwards the resolved
+# token to its browser fetches via a meta tag.
 auth_token_env: ""
+
 log_level: info
 
 ui:
