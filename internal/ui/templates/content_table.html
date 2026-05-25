@@ -7,6 +7,7 @@
   </div>
   <div class="flex items-center gap-3">
     <div class="text-sm text-zinc-400" id="content-range">—</div>
+    <a href="/t/{{.Name}}/schema" class="text-sm text-zinc-400 hover:text-zinc-200">Schema →</a>
     {{if not $.ReadOnly}}
     <a href="/t/{{.Name}}/new" class="px-3 py-1 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">+ New</a>
     {{end}}
