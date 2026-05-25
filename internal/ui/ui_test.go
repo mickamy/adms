@@ -406,6 +406,169 @@ func TestBareTableName(t *testing.T) {
 	}
 }
 
+func TestInputKind(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		typ, want string
+	}{
+		// boolean
+		{"boolean", "boolean"},
+		{"BOOLEAN", "boolean"},
+		{"bool", "boolean"},
+		{"tinyint(1)", "boolean"},
+		{"TINYINT(1) UNSIGNED", "boolean"},
+		// integer — Postgres
+		{"smallint", "integer"},
+		{"integer", "integer"},
+		{"bigint", "integer"},
+		{"smallserial", "integer"},
+		{"serial", "integer"},
+		{"bigserial", "integer"},
+		// integer — MySQL
+		{"tinyint", "integer"},
+		{"tinyint(4)", "integer"},
+		{"mediumint", "integer"},
+		{"int(11)", "integer"},
+		{"bigint(20)", "integer"},
+		// number (decimal / float)
+		{"numeric", "number"},
+		{"numeric(10,2)", "number"},
+		{"real", "number"},
+		{"double precision", "number"},
+		{"decimal(10,2)", "number"},
+		{"float", "number"},
+		{"double", "number"},
+		// date
+		{"date", "date"},
+		// json (incl. Postgres arrays)
+		{"json", "json"},
+		{"jsonb", "json"},
+		{"text[]", "json"},
+		{"integer[]", "json"},
+		{"numeric(10,2)[]", "json"},
+		// text fallback (varchar, timestamp, uuid, …)
+		{"text", "text"},
+		{"character varying", "text"},
+		{"character varying(255)", "text"},
+		{"varchar(255)", "text"},
+		{"timestamp with time zone", "text"},
+		{"timestamp without time zone", "text"},
+		{"datetime", "text"},
+		{"uuid", "text"},
+		{"", "text"},
+	}
+
+	for _, tc := range cases {
+		got := ui.InputKind(schema.Column{Type: tc.typ})
+		if got != tc.want {
+			t.Errorf("inputKind(%q) = %q, want %q", tc.typ, got, tc.want)
+		}
+	}
+}
+
+func typedSchema() schema.Schema {
+	return schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema: "public",
+				Name:   "alltypes",
+				Columns: []schema.Column{
+					{Name: "id", Type: "bigint"},
+					{Name: "name", Type: "text"},
+					{Name: "active", Type: "boolean"},
+					{Name: "born", Type: "date"},
+					{Name: "meta", Type: "jsonb"},
+					{Name: "score", Type: "numeric"},
+					{Name: "tags", Type: "text[]"},
+				},
+				PrimaryKey: []string{"id"},
+			},
+		},
+	}
+}
+
+func TestRowFormRendersTypedInputs(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, typedSchema())
+
+	resp := httpGet(t, ts.URL+"/t/alltypes/r/1")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`data-col="id" data-kind="integer" name="id" type="number" step="1"`,
+		`data-col="name" data-kind="text" name="name" type="text"`,
+		`<select data-col="active" data-kind="boolean" name="active"`,
+		`<option value="true">true</option>`,
+		`<option value="false">false</option>`,
+		`data-col="born" data-kind="date" name="born" type="date"`,
+		`<textarea data-col="meta" data-kind="json" name="meta"`,
+		`data-col="score" data-kind="number" name="score" type="number" step="any"`,
+		`<textarea data-col="tags" data-kind="json" name="tags"`,
+		// helpers live in layout.html now and are addressed via the
+		// `adms` prefix; assert their presence in the rendered page.
+		`function admsParseValue(input)`,
+		`function admsSetInputValue(input, v)`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("row form missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
+func TestNewFormRendersTypedInputs(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, typedSchema())
+
+	resp := httpGet(t, ts.URL+"/t/alltypes/new")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`data-col="id" data-kind="integer" name="id" type="number" step="1"`,
+		`<select data-col="active" data-kind="boolean" name="active"`,
+		`data-col="born" data-kind="date" name="born" type="date"`,
+		`<textarea data-col="meta" data-kind="json" name="meta"`,
+		`data-col="score" data-kind="number" name="score" type="number" step="any"`,
+		`<textarea data-col="tags" data-kind="json" name="tags"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("new form missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
+func TestEditModalRendersTypedInputs(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, typedSchema())
+
+	resp := httpGet(t, ts.URL+"/t/alltypes")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`data-edit-col="id" data-kind="integer" name="id" type="number" step="1"`,
+		`<select data-edit-col="active" data-kind="boolean" name="active"`,
+		`data-edit-col="born" data-kind="date" name="born" type="date"`,
+		`<textarea data-edit-col="meta" data-kind="json" name="meta"`,
+		`data-edit-col="score" data-kind="number" name="score" type="number" step="any"`,
+		`<textarea data-edit-col="tags" data-kind="json" name="tags"`,
+		`function admsParseValue(input)`,
+		`function admsSetInputValue(input, v)`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("edit modal missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
 func TestOutgoingFKsSkipsCompositeFKs(t *testing.T) {
 	t.Parallel()
 

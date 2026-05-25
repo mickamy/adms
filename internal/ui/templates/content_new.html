@@ -15,8 +15,30 @@
       {{.Name}}
       <span class="text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
     </label>
-    <input data-col="{{.Name}}" name="{{.Name}}" placeholder="empty = column default / NULL"
+    {{$kind := inputKind .}}
+    {{if eq $kind "boolean"}}
+    <select data-col="{{.Name}}" data-kind="boolean" name="{{.Name}}"
       class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      <option value=""></option>
+      <option value="true">true</option>
+      <option value="false">false</option>
+    </select>
+    {{else if eq $kind "json"}}
+    <textarea data-col="{{.Name}}" data-kind="json" name="{{.Name}}" rows="3" placeholder="empty = column default / NULL"
+      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600 font-mono text-xs"></textarea>
+    {{else if eq $kind "integer"}}
+    <input data-col="{{.Name}}" data-kind="integer" name="{{.Name}}" type="number" step="1" placeholder="empty = column default / NULL"
+      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+    {{else if eq $kind "number"}}
+    <input data-col="{{.Name}}" data-kind="number" name="{{.Name}}" type="number" step="any" placeholder="empty = column default / NULL"
+      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+    {{else if eq $kind "date"}}
+    <input data-col="{{.Name}}" data-kind="date" name="{{.Name}}" type="date"
+      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+    {{else}}
+    <input data-col="{{.Name}}" data-kind="text" name="{{.Name}}" type="text" placeholder="empty = column default / NULL"
+      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+    {{end}}
   </div>
   {{end}}
   <div class="flex gap-2 items-center pt-2">
@@ -46,21 +68,14 @@
       } catch (_) { return text || String(resp.status); }
     }
 
-    function parseValue(v) {
-      if (v === '') return undefined;
-      if (v === 'null') return null;
-      if (v === 'true') return true;
-      if (v === 'false') return false;
-      if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
-      try { return JSON.parse(v); } catch (_) { return v; }
-    }
-
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       setStatus('Inserting…', false);
       const body = {};
       columns.forEach((c) => {
-        const v = parseValue(form.elements[c].value);
+        const input = form.elements[c];
+        if (!input) return;
+        const v = admsParseValue(input);
         if (v !== undefined) body[c] = v;
       });
       const resp = await fetch(apiOrigin + '/' + tableName, {
