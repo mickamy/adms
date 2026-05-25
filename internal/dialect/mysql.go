@@ -48,3 +48,20 @@ func (mysqlDialect) StringLiteral(s string) string {
 	s = strings.ReplaceAll(s, "'", "''")
 	return "'" + s + "'"
 }
+
+// ContainmentExpr maps PostgREST's cs/cd to MySQL JSON_CONTAINS. MySQL
+// has no native array type, so only `json` columns are accepted; other
+// types are rejected with an error so callers fail loudly instead of
+// emitting nonsense SQL.
+func (mysqlDialect) ContainmentExpr(col, val, columnType string, contained bool) (string, error) {
+	t := strings.ToLower(strings.TrimSpace(columnType))
+	if t != "json" {
+		return "", fmt.Errorf("mysql: cs/cd not supported for column type %q (json only)", columnType)
+	}
+
+	if contained {
+		return fmt.Sprintf("JSON_CONTAINS(%s, %s)", val, col), nil
+	}
+
+	return fmt.Sprintf("JSON_CONTAINS(%s, %s)", col, val), nil
+}

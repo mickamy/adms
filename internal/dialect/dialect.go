@@ -18,4 +18,14 @@ type Dialect interface {
 	// engine-appropriate escaping (e.g., MySQL also escapes backslashes when
 	// NO_BACKSLASH_ESCAPES is off, which is the default).
 	StringLiteral(s string) string
+	// ContainmentExpr returns an SQL boolean expression for a JSON / array
+	// containment predicate. col is the already-quoted column reference,
+	// valPlaceholder is the parameter placeholder for the right-hand value,
+	// columnType is the column's introspected type (e.g., "jsonb",
+	// "text[]", "json"), and contained switches between "col contains
+	// value" (false: PostgREST's `cs`, Postgres `@>`) and "col is
+	// contained in value" (true: PostgREST's `cd`, Postgres `<@`).
+	// Returns an error if the dialect cannot express the operation for
+	// the given column type.
+	ContainmentExpr(col, valPlaceholder, columnType string, contained bool) (string, error)
 }

@@ -137,3 +137,79 @@ func TestPostgresStringLiteral(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgresContainmentExpr(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.Postgres()
+
+	tests := []struct {
+		name       string
+		col        string
+		val        string
+		columnType string
+		contained  bool
+		wantSQL    string
+		wantErr    bool
+	}{
+		{
+			name: "jsonb cs", col: `"tags"`, val: "$1",
+			columnType: "jsonb", wantSQL: `"tags" @> $1::jsonb`,
+		},
+		{
+			name: "jsonb cd", col: `"tags"`, val: "$1",
+			columnType: "jsonb", contained: true,
+			wantSQL: `"tags" <@ $1::jsonb`,
+		},
+		{
+			name: "json upcast to jsonb", col: `"payload"`, val: "$1",
+			columnType: "json", wantSQL: `"payload"::jsonb @> $1::jsonb`,
+		},
+		{
+			name: "text array", col: `"roles"`, val: "$1",
+			columnType: "text[]", wantSQL: `"roles" @> $1::text[]`,
+		},
+		{
+			name: "integer array contained", col: `"ids"`, val: "$1",
+			columnType: "integer[]", contained: true,
+			wantSQL: `"ids" <@ $1::integer[]`,
+		},
+		{
+			name: "numeric array preserves precision", col: `"scores"`, val: "$1",
+			columnType: "numeric(10,2)[]", wantSQL: `"scores" @> $1::numeric(10,2)[]`,
+		},
+		{
+			name: "case insensitive type", col: `"tags"`, val: "$1",
+			columnType: "JSONB", wantSQL: `"tags" @> $1::jsonb`,
+		},
+		{
+			name: "unsupported column type errors", col: `"name"`, val: "$1",
+			columnType: "text", wantErr: true,
+		},
+		{
+			name: "empty type errors", col: `"x"`, val: "$1",
+			columnType: "", wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := d.ContainmentExpr(tt.col, tt.val, tt.columnType, tt.contained)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ContainmentExpr(%q) = %q, want error", tt.columnType, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("ContainmentExpr(%q) returned unexpected error: %v", tt.columnType, err)
+				return
+			}
+			if got != tt.wantSQL {
+				t.Errorf("ContainmentExpr(%q) = %q, want %q", tt.columnType, got, tt.wantSQL)
+			}
+		})
+	}
+}

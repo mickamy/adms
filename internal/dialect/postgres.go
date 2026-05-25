@@ -45,3 +45,27 @@ func (postgresDialect) EmptyJSONArray() string {
 func (postgresDialect) StringLiteral(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
+
+// ContainmentExpr maps PostgREST's cs/cd to Postgres `@>` / `<@`. For
+// json columns the column is upcast to jsonb so the operator applies
+// (plain json does not implement `@>`). For array columns the value is
+// cast to the column's array type so that the same expression works for
+// text[], integer[], numeric(10,2)[], etc.
+func (postgresDialect) ContainmentExpr(col, val, columnType string, contained bool) (string, error) {
+	op := "@>"
+	if contained {
+		op = "<@"
+	}
+
+	t := strings.ToLower(strings.TrimSpace(columnType))
+	switch {
+	case t == "jsonb":
+		return fmt.Sprintf("%s %s %s::jsonb", col, op, val), nil
+	case t == "json":
+		return fmt.Sprintf("%s::jsonb %s %s::jsonb", col, op, val), nil
+	case strings.HasSuffix(t, "[]"):
+		return fmt.Sprintf("%s %s %s::%s", col, op, val, t), nil
+	}
+
+	return "", fmt.Errorf("postgres: cs/cd not supported for column type %q", columnType)
+}

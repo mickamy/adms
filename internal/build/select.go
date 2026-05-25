@@ -267,6 +267,10 @@ func buildPredicate(
 		expr, err = inOp(quoted, p.Value, d, args)
 	case query.OpIs:
 		expr, err = isOp(quoted, p.Value)
+	case query.OpCs:
+		expr, err = containmentOp(quoted, p.Value, t, p.Column, d, args, false)
+	case query.OpCd:
+		expr, err = containmentOp(quoted, p.Value, t, p.Column, d, args, true)
 	default:
 		return "", fmt.Errorf("internal: unknown operator %v", p.Op)
 	}
@@ -311,6 +315,41 @@ func inOp(quotedCol, csv string, d dialect.Dialect, args *[]any) (string, error)
 	}
 
 	return fmt.Sprintf("%s IN (%s)", quotedCol, strings.Join(placeholders, ", ")), nil
+}
+
+// containmentOp routes PostgREST's cs/cd to the dialect-specific JSON /
+// array containment expression. The column's introspected type drives
+// the cast / function chosen by the dialect, so the build layer stays
+// agnostic of @> vs JSON_CONTAINS semantics. buildPredicate has already
+// rejected unknown columns, so the lookup below is guaranteed to find a
+// match; if it ever did not, the empty Type would surface as a clean
+// dialect-side error rather than a panic.
+func containmentOp(
+	quotedCol, value string,
+	t *schema.Table,
+	column string,
+	d dialect.Dialect,
+	args *[]any,
+	contained bool,
+) (string, error) {
+	var columnType string
+
+	for _, c := range t.Columns {
+		if c.Name == column {
+			columnType = c.Type
+			break
+		}
+	}
+
+	*args = append(*args, value)
+	ph := d.Placeholder(len(*args))
+
+	expr, err := d.ContainmentExpr(quotedCol, ph, columnType, contained)
+	if err != nil {
+		return "", fmt.Errorf("containment on %q: %w", column, err)
+	}
+
+	return expr, nil
 }
 
 func isOp(quotedCol, literal string) (string, error) {

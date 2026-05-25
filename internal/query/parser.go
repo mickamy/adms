@@ -233,7 +233,7 @@ func parsePredicate(column, value string) (Predicate, error) {
 		if val == "" {
 			return Predicate{}, errors.New("invalid in value: list is empty")
 		}
-	case OpEq, OpNeq, OpGt, OpGte, OpLt, OpLte, OpLike, OpILike:
+	case OpEq, OpNeq, OpGt, OpGte, OpLt, OpLte, OpLike, OpILike, OpCs, OpCd:
 		// scalar operators take the value as-is
 	}
 

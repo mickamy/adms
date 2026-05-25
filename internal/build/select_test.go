@@ -21,6 +21,9 @@ func usersTable() *schema.Table {
 			{Name: "age"},
 			{Name: "deleted_at", Nullable: true},
 			{Name: "active"},
+			{Name: "tags", Type: "jsonb"},
+			{Name: "settings", Type: "json"},
+			{Name: "roles", Type: "text[]"},
 		},
 	}
 }
@@ -109,6 +112,30 @@ func TestSelect_Postgres(t *testing.T) {
 				Filter: query.Predicate{Column: "deleted_at", Op: query.OpIs, Value: "null"},
 			},
 			wantSQL: `SELECT * FROM "public"."users" WHERE "deleted_at" IS NULL LIMIT 100 OFFSET 0`,
+		},
+		{
+			name: "cs on jsonb column",
+			q: query.Query{
+				Filter: query.Predicate{Column: "tags", Op: query.OpCs, Value: `["welcome"]`},
+			},
+			wantSQL:  `SELECT * FROM "public"."users" WHERE "tags" @> $1::jsonb LIMIT 100 OFFSET 0`,
+			wantArgs: []any{`["welcome"]`},
+		},
+		{
+			name: "cd on jsonb column",
+			q: query.Query{
+				Filter: query.Predicate{Column: "tags", Op: query.OpCd, Value: `["welcome","intro"]`},
+			},
+			wantSQL:  `SELECT * FROM "public"."users" WHERE "tags" <@ $1::jsonb LIMIT 100 OFFSET 0`,
+			wantArgs: []any{`["welcome","intro"]`},
+		},
+		{
+			name: "cs on text array column",
+			q: query.Query{
+				Filter: query.Predicate{Column: "roles", Op: query.OpCs, Value: "{admin,owner}"},
+			},
+			wantSQL:  `SELECT * FROM "public"."users" WHERE "roles" @> $1::text[] LIMIT 100 OFFSET 0`,
+			wantArgs: []any{"{admin,owner}"},
 		},
 		{
 			name: "is true",
@@ -240,6 +267,22 @@ func TestSelect_MySQL(t *testing.T) {
 			wantSQL:  "SELECT * FROM `public`.`users` WHERE `id` IN (?, ?, ?) LIMIT 100 OFFSET 0",
 			wantArgs: []any{"1", "2", "3"},
 		},
+		{
+			name: "cs on json column uses JSON_CONTAINS",
+			q: query.Query{
+				Filter: query.Predicate{Column: "settings", Op: query.OpCs, Value: `{"dark":true}`},
+			},
+			wantSQL:  "SELECT * FROM `public`.`users` WHERE JSON_CONTAINS(`settings`, ?) LIMIT 100 OFFSET 0",
+			wantArgs: []any{`{"dark":true}`},
+		},
+		{
+			name: "cd swaps JSON_CONTAINS arguments",
+			q: query.Query{
+				Filter: query.Predicate{Column: "settings", Op: query.OpCd, Value: `{"dark":true,"compact":false}`},
+			},
+			wantSQL:  "SELECT * FROM `public`.`users` WHERE JSON_CONTAINS(?, `settings`) LIMIT 100 OFFSET 0",
+			wantArgs: []any{`{"dark":true,"compact":false}`},
+		},
 	}
 
 	for _, tt := range tests {
@@ -367,6 +410,12 @@ func TestSelect_Errors(t *testing.T) {
 			name: "select cannot list the same column twice",
 			q: query.Query{
 				Select: []query.SelectItem{{Column: "id"}, {Column: "id"}},
+			},
+		},
+		{
+			name: "cs on unsupported column type",
+			q: query.Query{
+				Filter: query.Predicate{Column: "name", Op: query.OpCs, Value: `["x"]`},
 			},
 		},
 		{
