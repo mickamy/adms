@@ -120,11 +120,15 @@
     const outgoingFKs = {
       {{range $col, $ref := $.OutgoingFKs}}{{$col}}: { table: {{$ref.Table}}, column: {{$ref.Column}} },{{end}}
     };
+    const columnKinds = {
+      {{range .Columns}}{{.Name}}: {{inputKind .}},{{end}}
+    };
     const apiOrigin = document.querySelector('meta[name="adms-api-origin"]').content;
     const form = document.getElementById('filters');
     const tbody = document.getElementById('rows');
     const rangeEl = document.getElementById('content-range');
     const colSpan = columns.length + (pkColumn ? 1 : 0);
+    let currentRows = [];
 
     function escapeHTML(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -178,11 +182,13 @@
     }
 
     function renderRows(rows) {
+      currentRows = rows;
       if (!rows.length) {
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-zinc-500 text-center">No rows.</td></tr>`;
         return;
       }
       tbody.innerHTML = rows.map((row) => {
+        const pkRaw = pkColumn ? String(row[pkColumn]) : null;
         const cells = columns.map((c) => {
           const v = row[c];
           let cell;
@@ -198,11 +204,21 @@
               cell = text;
             }
           }
-          return `<td class="px-3 py-2 align-top whitespace-pre-wrap">${cell}</td>`;
+          // Mark every cell as inline-editable except the PK column
+          // (used to construct the PATCH URL). The dblclick handler
+          // below reads data-col / data-row-pk to start an in-place
+          // edit; the FK arrow has its own <a> so click bubbles are
+          // filtered there.
+          const editable = pkRaw !== null && c !== pkColumn;
+          const editAttrs = editable
+            ? ` data-col="${escapeHTML(c)}" data-row-pk="${escapeHTML(pkRaw)}"`
+            : '';
+          const editClass = editable ? ' cursor-text' : '';
+          return `<td class="px-3 py-2 align-top whitespace-pre-wrap${editClass}"${editAttrs}>${cell}</td>`;
         }).join('');
         let actions = '';
         if (pkColumn) {
-          const pkVal = encodeURIComponent(String(row[pkColumn]));
+          const pkVal = encodeURIComponent(pkRaw);
           actions = `<td class="px-3 py-2 align-top text-right whitespace-nowrap">
             <button type="button" data-edit-pk="${pkVal}" class="text-zinc-300 hover:text-zinc-100 mr-3">edit</button>
             <button type="button" data-delete="${pkVal}" class="text-red-400 hover:text-red-300">delete</button>
@@ -367,6 +383,111 @@
         if (resp.ok) { load(); return; }
         alert('DELETE ' + resp.status + ': ' + await readError(resp));
       });
+
+      // Inline cell edit: double-clicking an editable cell swaps its
+      // text for a kind-aware input. Enter (or blur) saves via PATCH;
+      // Escape cancels. The FK arrow inside the cell is excluded so
+      // navigating to the referenced row still works.
+      tbody.addEventListener('dblclick', (e) => {
+        if (e.target.closest('a')) return;
+        const td = e.target.closest('td[data-col][data-row-pk]');
+        if (!td || td.dataset.editing) return;
+        startCellEdit(td);
+      });
+    }
+
+    function createCellEditInput(kind) {
+      if (kind === 'boolean') {
+        const sel = document.createElement('select');
+        sel.dataset.kind = 'boolean';
+        ['', 'true', 'false'].forEach((v) => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          sel.appendChild(opt);
+        });
+        return sel;
+      }
+      if (kind === 'json') {
+        const ta = document.createElement('textarea');
+        ta.dataset.kind = 'json';
+        ta.rows = 3;
+        return ta;
+      }
+      const input = document.createElement('input');
+      input.dataset.kind = kind;
+      if (kind === 'integer') { input.type = 'number'; input.step = '1'; }
+      else if (kind === 'number') { input.type = 'number'; input.step = 'any'; }
+      else if (kind === 'date') { input.type = 'date'; }
+      else { input.type = 'text'; }
+      return input;
+    }
+
+    function startCellEdit(td) {
+      const col = td.dataset.col;
+      const pk = td.dataset.rowPk;
+      const row = currentRows.find((r) => String(r[pkColumn]) === pk);
+      if (!row) return;
+      td.dataset.editing = '1';
+
+      const kind = columnKinds[col] || 'text';
+      const rawValue = row[col];
+      const originalHTML = td.innerHTML;
+
+      const input = createCellEditInput(kind);
+      input.className = 'w-full px-1 py-0.5 rounded bg-zinc-800 border border-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600 text-sm';
+      admsSetInputValue(input, rawValue);
+
+      td.innerHTML = '';
+      td.appendChild(input);
+      input.focus();
+      if (typeof input.select === 'function') input.select();
+
+      let done = false;
+      const cleanup = async (commit) => {
+        if (done) return;
+        done = true;
+        delete td.dataset.editing;
+
+        if (!commit) {
+          td.innerHTML = originalHTML;
+          return;
+        }
+
+        let next = admsParseValue(input);
+        if (next === undefined) next = null;
+        if (JSON.stringify(next) === JSON.stringify(rawValue)) {
+          td.innerHTML = originalHTML;
+          return;
+        }
+
+        await saveCellEdit(col, pk, next);
+      };
+
+      const isTextarea = input.tagName === 'TEXTAREA';
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (!isTextarea || e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          cleanup(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup(false);
+        }
+      });
+      input.addEventListener('blur', () => cleanup(true));
+    }
+
+    async function saveCellEdit(col, pk, value) {
+      const url = new URL(apiOrigin + '/' + tableName);
+      url.searchParams.set(pkColumn, 'eq.' + pk);
+      const resp = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [col]: value }),
+      });
+      if (resp.ok) { load(); return; }
+      alert('PATCH ' + resp.status + ': ' + await readError(resp));
+      load();
     }
 
     load();
