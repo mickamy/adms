@@ -5,13 +5,16 @@
     <h1 class="text-2xl font-semibold">{{.Name}}</h1>
     <p class="text-zinc-500 text-sm">{{.Schema}}{{if .PrimaryKey}} · PK: {{range $i, $col := .PrimaryKey}}{{if $i}}, {{end}}{{$col}}{{end}}{{end}}</p>
   </div>
-  <div class="text-sm text-zinc-400" id="content-range">—</div>
+  <div class="flex items-center gap-3">
+    <div class="text-sm text-zinc-400" id="content-range">—</div>
+    <a href="/t/{{.Name}}/new" class="px-3 py-1 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">+ New</a>
+  </div>
 </div>
 
 <form id="filters" class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4 text-sm">
   <div>
     <label class="block text-zinc-500 text-xs mb-1">order=</label>
-    <input name="order" placeholder="col.desc,col2.asc"
+    <input name="order" value="{{if .PrimaryKey}}{{index .PrimaryKey 0}}.asc{{end}}" placeholder="col.desc,col2.asc"
       class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
   </div>
   <div>
@@ -38,6 +41,7 @@
     <thead class="bg-zinc-900 text-zinc-400">
       <tr>
         {{range .Columns}}<th data-col="{{.Name}}" class="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none">{{.Name}}<span class="text-zinc-600 text-xs ml-1">{{.Type}}</span></th>{{end}}
+        {{if $.RowPKColumn}}<th class="px-3 py-2 text-right font-medium">actions</th>{{end}}
       </tr>
     </thead>
     <tbody id="rows" class="divide-y divide-zinc-800">
@@ -57,10 +61,12 @@
   (function () {
     const tableName = {{.Name}};
     const columns = [{{range $i, $col := .Columns}}{{if $i}},{{end}}{{$col.Name}}{{end}}];
+    const pkColumn = {{$.RowPKColumn}};
     const apiOrigin = document.querySelector('meta[name="adms-api-origin"]').content;
     const form = document.getElementById('filters');
     const tbody = document.getElementById('rows');
     const rangeEl = document.getElementById('content-range');
+    const colSpan = columns.length + (pkColumn ? 1 : 0);
 
     function escapeHTML(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -74,36 +80,52 @@
       return url;
     }
 
+    async function readError(resp) {
+      const text = await resp.text();
+      try {
+        const p = JSON.parse(text);
+        return p.detail || p.title || text;
+      } catch (_) { return text || String(resp.status); }
+    }
+
     async function load() {
-      tbody.innerHTML = `<tr><td colspan="${columns.length}" class="px-3 py-6 text-zinc-500 text-center">Loading…</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-zinc-500 text-center">Loading…</td></tr>`;
       try {
         const resp = await fetch(buildURL(), { headers: { Prefer: 'count=exact' } });
         rangeEl.textContent = resp.headers.get('Content-Range') || '—';
         if (!resp.ok) {
-          const body = await resp.text();
-          tbody.innerHTML = `<tr><td colspan="${columns.length}" class="px-3 py-6 text-red-400 text-center">${escapeHTML(body) || resp.status}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-red-400 text-center">${escapeHTML(await readError(resp))}</td></tr>`;
           return;
         }
         renderRows(await resp.json());
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="${columns.length}" class="px-3 py-6 text-red-400 text-center">${escapeHTML(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-red-400 text-center">${escapeHTML(err.message)}</td></tr>`;
       }
     }
 
     function renderRows(rows) {
       if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="${columns.length}" class="px-3 py-6 text-zinc-500 text-center">No rows.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-zinc-500 text-center">No rows.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((row) =>
-        '<tr class="hover:bg-zinc-900">' + columns.map((c) => {
+      tbody.innerHTML = rows.map((row) => {
+        const cells = columns.map((c) => {
           const v = row[c];
           const cell = (v === null || v === undefined)
             ? '<span class="text-zinc-600">null</span>'
             : escapeHTML(typeof v === 'object' ? JSON.stringify(v) : v);
           return `<td class="px-3 py-2 align-top whitespace-pre-wrap">${cell}</td>`;
-        }).join('') + '</tr>'
-      ).join('');
+        }).join('');
+        let actions = '';
+        if (pkColumn) {
+          const pkVal = encodeURIComponent(String(row[pkColumn]));
+          actions = `<td class="px-3 py-2 align-top text-right whitespace-nowrap">
+            <a href="/t/${encodeURIComponent(tableName)}/r/${pkVal}" class="text-zinc-300 hover:text-zinc-100 mr-3">edit</a>
+            <button type="button" data-delete="${pkVal}" class="text-red-400 hover:text-red-300">delete</button>
+          </td>`;
+        }
+        return `<tr class="hover:bg-zinc-900">${cells}${actions}</tr>`;
+      }).join('');
     }
 
     let debounce;
@@ -135,6 +157,20 @@
         load();
       });
     });
+
+    if (pkColumn) {
+      tbody.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-delete]');
+        if (!btn) return;
+        const pkVal = decodeURIComponent(btn.dataset.delete);
+        if (!confirm('Delete ' + pkColumn + '=' + pkVal + '?')) return;
+        const url = new URL(apiOrigin + '/' + tableName);
+        url.searchParams.set(pkColumn, 'eq.' + pkVal);
+        const resp = await fetch(url, { method: 'DELETE' });
+        if (resp.ok) { load(); return; }
+        alert('DELETE ' + resp.status + ': ' + await readError(resp));
+      });
+    }
 
     load();
   })();

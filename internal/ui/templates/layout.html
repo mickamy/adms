@@ -33,6 +33,9 @@
   <main class="flex-1 p-6 overflow-x-auto">
     {{if eq .ContentTmpl "content_index.html"}}{{template "content_index.html" .}}{{end}}
     {{if eq .ContentTmpl "content_table.html"}}{{template "content_table.html" .}}{{end}}
+    {{if eq .ContentTmpl "content_new.html"}}{{template "content_new.html" .}}{{end}}
+    {{if eq .ContentTmpl "content_row.html"}}{{template "content_row.html" .}}{{end}}
+    {{if eq .ContentTmpl "content_row_unsupported.html"}}{{template "content_row_unsupported.html" .}}{{end}}
   </main>
   <script>
     function filterTables(q) {
