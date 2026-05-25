@@ -127,12 +127,128 @@ func TestTableViewIncludesActions(t *testing.T) {
 
 	for _, want := range []string{
 		`href="/t/users/new"`,
+		`href="/t/users/schema"`,
 		`>actions<`,
 		`const pkColumn = "id"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q\n---body---\n%s", want, body)
 		}
+	}
+}
+
+func TestSchemaViewRendersTableMetadata(t *testing.T) {
+	t.Parallel()
+
+	scoreDefault := "0"
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema: "public",
+				Name:   "users",
+				Columns: []schema.Column{
+					{Name: "id", Type: "bigint", IsIdentity: true},
+					{Name: "email", Type: "text", Comment: "primary contact"},
+					{Name: "name", Type: "text", Nullable: true},
+					{Name: "score", Type: "numeric", Default: &scoreDefault},
+				},
+				PrimaryKey: []string{"id"},
+				ReferencedBy: []schema.ForeignKey{
+					{Table: "public.posts", Columns: []string{"user_id"}, References: []string{"id"}},
+				},
+				Indexes: []schema.Index{
+					{Name: "users_pkey", Columns: []string{"id"}, Unique: true},
+					{Name: "users_email_idx", Columns: []string{"email"}, Unique: true},
+				},
+			},
+			{
+				Schema: "public",
+				Name:   "posts",
+				Columns: []schema.Column{
+					{Name: "id", Type: "bigint"},
+					{Name: "user_id", Type: "bigint"},
+				},
+				PrimaryKey: []string{"id"},
+				ForeignKeys: []schema.ForeignKey{
+					{Table: "public.users", Columns: []string{"user_id"}, References: []string{"id"}},
+				},
+			},
+		},
+	}
+
+	ts := newTestUIServer(t, sch)
+
+	resp := httpGet(t, ts.URL+"/t/users/schema")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// page header
+		`<title>Schema · users</title>`,
+		`← Data`,
+		// columns table headers
+		`>name<`, `>type<`, `>nullable<`, `>default<`, `>notes<`,
+		// rows
+		`>id</td>`,
+		`>email</td>`,
+		`>bigint</td>`,
+		`>numeric</td>`,
+		// nullable mapping
+		`>yes</td>`, `>no</td>`,
+		// default rendered raw
+		`>0</td>`,
+		// notes column carries identity tag + column comment
+		`>identity</span>`,
+		`primary contact`,
+		// PK / Referenced by / Indexes sections
+		`>Primary key<`,
+		`· PK: id ·`,
+		`>Referenced by<`,
+		// Referenced-by row: linked source table + qualified right-hand side
+		`<a href="/t/posts/schema" class="text-zinc-100 hover:underline">public.posts</a>(user_id)`,
+		`public.users(id)`,
+		`>Indexes<`,
+		`users_pkey`,
+		`users_email_idx`,
+		`>UNIQUE</span>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("schema view missing %q\n---body---\n%s", want, body)
+		}
+	}
+
+	// users has no outgoing FKs; section should be absent.
+	if strings.Contains(body, `>Foreign keys<`) {
+		t.Errorf("users schema view should not render an outgoing Foreign keys section")
+	}
+
+	// posts schema page should show the outgoing FK.
+	pres := httpGet(t, ts.URL+"/t/posts/schema")
+	defer func() { _ = pres.Body.Close() }()
+
+	pbody := readAll(t, pres)
+	for _, want := range []string{
+		`>Foreign keys<`,
+		// Outgoing FK row: linked target table
+		`<a href="/t/users/schema" class="text-zinc-100 hover:underline">public.users</a>(id)`,
+	} {
+		if !strings.Contains(pbody, want) {
+			t.Errorf("posts schema view missing %q", want)
+		}
+	}
+}
+
+func TestSchemaViewUnknownTableReturns404(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/ghost/schema")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
 

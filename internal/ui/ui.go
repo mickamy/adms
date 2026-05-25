@@ -51,8 +51,9 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 	// template.ParseFS would fail to compile templates that reference
 	// these funcs, so all UI templates must come through this constructor.
 	tmpl, err := template.New("ui").Funcs(template.FuncMap{
-		"inputKind":  inputKind,
-		"filterHint": filterHint,
+		"inputKind":     inputKind,
+		"filterHint":    filterHint,
+		"bareTableName": bareTableName,
 	}).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("ui: parse templates: %w", err)
@@ -138,6 +139,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /__healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /t/{table}", s.tableView)
+	mux.HandleFunc("GET /t/{table}/schema", s.schemaView)
 	mux.HandleFunc("GET /t/{table}/new", s.newRow)
 	mux.HandleFunc("GET /t/{table}/r/{pk}", s.rowView)
 

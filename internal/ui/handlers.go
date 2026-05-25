@@ -214,6 +214,22 @@ func (s *Server) newRow(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) schemaView(w http.ResponseWriter, r *http.Request) {
+	t := s.findTable(r.PathValue("table"))
+	if t == nil {
+		http.NotFound(w, r)
+
+		return
+	}
+
+	s.renderLayout(w, r, layoutData{
+		Title:        "Schema · " + t.Name,
+		ActiveTable:  t.Name,
+		ContentTmpl:  "content_schema.html",
+		ContentTable: t,
+	})
+}
+
 func (s *Server) rowView(w http.ResponseWriter, r *http.Request) {
 	t := s.findTable(r.PathValue("table"))
 	if t == nil {
