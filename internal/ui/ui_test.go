@@ -135,6 +135,72 @@ func TestTableViewIncludesActions(t *testing.T) {
 	}
 }
 
+func TestTableViewRendersEditModal(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`<dialog id="edit-modal"`,
+		`id="edit-form"`,
+		`id="edit-cancel"`,
+		`id="edit-delete"`,
+		`id="edit-fullpage-link"`,
+		`data-edit-col="id"`,
+		`data-edit-col="name"`,
+		`modal.showModal()`,
+		`function openEditModal(`,
+		`data-edit-pk="${pkVal}"`,
+		`editFullpageLink.href = '/t/' + encodeURIComponent(tableName) + '/r/' + encodeURIComponent(pkVal)`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("table view missing modal piece %q\n---body---\n%s", want, body)
+		}
+	}
+
+	// The edit button must NOT navigate to /r/{pk} anymore — modal handles
+	// it. The deep-link /t/{table}/r/{pk} still works through the sidebar
+	// and the "Open full page" link, but the table row's edit action should
+	// be a button, not an anchor.
+	bad := `<a href="/t/${encodeURIComponent(tableName)}/r/${pkVal}"`
+	if strings.Contains(body, bad) {
+		t.Errorf("table view still navigates from edit action; want modal\n---body---\n%s", body)
+	}
+}
+
+func TestTableViewOmitsEditModalForCompositePK(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema: "public",
+				Name:   "joinrow",
+				Columns: []schema.Column{
+					{Name: "a", Type: "bigint"},
+					{Name: "b", Type: "bigint"},
+				},
+				PrimaryKey: []string{"a", "b"},
+			},
+		},
+	}
+
+	ts := newTestUIServer(t, sch)
+
+	resp := httpGet(t, ts.URL+"/t/joinrow")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+	if strings.Contains(body, `<dialog id="edit-modal"`) {
+		t.Errorf("composite-PK table should not render edit modal\n---body---\n%s", body)
+	}
+}
+
 func TestNewRowFormRenders(t *testing.T) {
 	t.Parallel()
 

@@ -57,6 +57,39 @@
     class="px-3 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">Next</button>
 </div>
 
+{{if $.RowPKColumn}}
+<dialog id="edit-modal" class="rounded-lg p-0 bg-transparent backdrop:bg-black/60">
+  <form id="edit-form" class="space-y-3 bg-zinc-950 text-zinc-100 border border-zinc-800 rounded-lg p-6 w-[40rem] max-w-[90vw]">
+    <header class="flex items-start justify-between gap-4 mb-2">
+      <div>
+        <h2 class="text-lg font-semibold">Edit row</h2>
+        <p class="text-zinc-500 text-sm" id="edit-meta">—</p>
+      </div>
+      <a id="edit-fullpage-link" href="#" class="text-sm text-zinc-400 hover:text-zinc-200 whitespace-nowrap">Open full page →</a>
+    </header>
+    {{range .Columns}}
+    <div>
+      <label class="block text-zinc-400 text-sm mb-1">
+        {{.Name}}
+        <span class="text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
+      </label>
+      <div class="flex items-center gap-2">
+        <input data-edit-col="{{.Name}}" name="{{.Name}}"
+          class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+        <a data-edit-fk-link="{{.Name}}" href="#" class="hidden text-zinc-400 hover:text-zinc-100 text-sm whitespace-nowrap"></a>
+      </div>
+    </div>
+    {{end}}
+    <footer class="flex gap-2 items-center pt-2">
+      <button type="submit" class="px-3 py-1.5 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">Save</button>
+      <button type="button" id="edit-delete" class="px-3 py-1.5 rounded bg-red-900/60 text-red-100 text-sm hover:bg-red-900">Delete</button>
+      <button type="button" id="edit-cancel" class="px-3 py-1.5 rounded bg-zinc-800 text-zinc-200 text-sm hover:bg-zinc-700">Cancel</button>
+      <span id="edit-status" class="text-sm text-zinc-400"></span>
+    </footer>
+  </form>
+</dialog>
+{{end}}
+
 <script>
   (function () {
     const tableName = {{.Name}};
@@ -133,7 +166,7 @@
         if (pkColumn) {
           const pkVal = encodeURIComponent(String(row[pkColumn]));
           actions = `<td class="px-3 py-2 align-top text-right whitespace-nowrap">
-            <a href="/t/${encodeURIComponent(tableName)}/r/${pkVal}" class="text-zinc-300 hover:text-zinc-100 mr-3">edit</a>
+            <button type="button" data-edit-pk="${pkVal}" class="text-zinc-300 hover:text-zinc-100 mr-3">edit</button>
             <button type="button" data-delete="${pkVal}" class="text-red-400 hover:text-red-300">delete</button>
           </td>`;
         }
@@ -171,11 +204,132 @@
       });
     });
 
+    const modal = pkColumn ? document.getElementById('edit-modal') : null;
+    const editForm = modal ? document.getElementById('edit-form') : null;
+    const editStatus = modal ? document.getElementById('edit-status') : null;
+    const editMeta = modal ? document.getElementById('edit-meta') : null;
+    const editFullpageLink = modal ? document.getElementById('edit-fullpage-link') : null;
+    let editingPK = null;
+
+    function setEditStatus(msg, isError) {
+      if (!editStatus) return;
+      editStatus.textContent = msg || '';
+      editStatus.className = 'text-sm ' + (isError ? 'text-red-400' : 'text-zinc-400');
+    }
+
+    function parseValue(v) {
+      if (v === '') return undefined;
+      if (v === 'null') return null;
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+      if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+      try { return JSON.parse(v); } catch (_) { return v; }
+    }
+
+    const editFKLinks = new Map();
+    if (editForm) {
+      editForm.querySelectorAll('[data-edit-fk-link]').forEach((el) => {
+        editFKLinks.set(el.dataset.editFkLink, el);
+      });
+    }
+
+    function updateEditFKLink(col) {
+      const ref = outgoingFKs[col];
+      if (!ref || !editForm) return;
+      const link = editFKLinks.get(col);
+      const input = editForm.elements[col];
+      if (!link || !input) return;
+      const v = input.value;
+      if (v === '' || v === 'null') { link.classList.add('hidden'); return; }
+      link.classList.remove('hidden');
+      link.textContent = '→ ' + ref.table;
+      link.href = '/t/' + encodeURIComponent(ref.table) + '/r/' + encodeURIComponent(v);
+    }
+
+    async function loadRowIntoModal() {
+      setEditStatus('Loading…', false);
+      const url = new URL(apiOrigin + '/' + tableName);
+      url.searchParams.set(pkColumn, 'eq.' + editingPK);
+      url.searchParams.set('limit', '1');
+      const resp = await fetch(url);
+      if (!resp.ok) { setEditStatus(await readError(resp), true); return; }
+      const rows = await resp.json();
+      if (!rows.length) { setEditStatus('Row not found.', true); return; }
+      const row = rows[0];
+      columns.forEach((c) => {
+        const input = editForm.elements[c];
+        if (!input) return;
+        const v = row[c];
+        input.value = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+        updateEditFKLink(c);
+      });
+      setEditStatus('', false);
+    }
+
+    function openEditModal(pkVal) {
+      if (!modal) return;
+      editingPK = pkVal;
+      editMeta.textContent = pkColumn + ' = ' + pkVal;
+      editFullpageLink.href = '/t/' + encodeURIComponent(tableName) + '/r/' + encodeURIComponent(pkVal);
+      modal.showModal();
+      loadRowIntoModal();
+    }
+
+    function closeEditModal() {
+      if (modal && modal.open) modal.close();
+      editingPK = null;
+    }
+
+    if (modal) {
+      document.getElementById('edit-cancel').addEventListener('click', closeEditModal);
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeEditModal(); });
+      modal.addEventListener('close', () => { editingPK = null; });
+
+      Object.keys(outgoingFKs).forEach((c) => {
+        const input = editForm.elements[c];
+        if (input) input.addEventListener('input', () => updateEditFKLink(c));
+      });
+
+      editForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        setEditStatus('Saving…', false);
+        const body = {};
+        columns.forEach((c) => {
+          const v = parseValue(editForm.elements[c].value);
+          if (v !== undefined) body[c] = v;
+        });
+        const url = new URL(apiOrigin + '/' + tableName);
+        url.searchParams.set(pkColumn, 'eq.' + editingPK);
+        const resp = await fetch(url, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (resp.ok) { closeEditModal(); load(); return; }
+        setEditStatus('PATCH ' + resp.status + ': ' + await readError(resp), true);
+      });
+
+      document.getElementById('edit-delete').addEventListener('click', async () => {
+        if (!confirm('Delete ' + pkColumn + '=' + editingPK + '?')) return;
+        setEditStatus('Deleting…', false);
+        const url = new URL(apiOrigin + '/' + tableName);
+        url.searchParams.set(pkColumn, 'eq.' + editingPK);
+        const resp = await fetch(url, { method: 'DELETE' });
+        if (resp.ok) { closeEditModal(); load(); return; }
+        setEditStatus('DELETE ' + resp.status + ': ' + await readError(resp), true);
+      });
+    }
+
     if (pkColumn) {
       tbody.addEventListener('click', async (e) => {
-        const btn = e.target.closest('[data-delete]');
-        if (!btn) return;
-        const pkVal = decodeURIComponent(btn.dataset.delete);
+        const editBtn = e.target.closest('[data-edit-pk]');
+        if (editBtn) {
+          openEditModal(decodeURIComponent(editBtn.dataset.editPk));
+          return;
+        }
+        const deleteBtn = e.target.closest('[data-delete]');
+        if (!deleteBtn) return;
+        const pkVal = decodeURIComponent(deleteBtn.dataset.delete);
         if (!confirm('Delete ' + pkColumn + '=' + pkVal + '?')) return;
         const url = new URL(apiOrigin + '/' + tableName);
         url.searchParams.set(pkColumn, 'eq.' + pkVal);
