@@ -201,6 +201,40 @@ func TestTableViewOmitsEditModalForCompositePK(t *testing.T) {
 	}
 }
 
+func TestTableViewEmitsInlineCellEditWiring(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// Per-column kind map drives the inline editor's input choice.
+		// Go's html/template JS-escapes the keys as string literals.
+		`const columnKinds = {`,
+		`"id": "integer"`,
+		`"name": "text"`,
+		// Tbody-level dblclick handler + the per-cell data attributes
+		// emitted from renderRows. Asserting the JS source covers both
+		// the handler wiring and the cell-render template literal.
+		`tbody.addEventListener('dblclick'`,
+		`td[data-col][data-row-pk]`,
+		`data-col="${escapeHTML(c)}" data-row-pk="${escapeHTML(pkRaw)}"`,
+		`function startCellEdit(td)`,
+		`function createCellEditInput(kind)`,
+		`function saveCellEdit(col, pk, value)`,
+		// PK column must remain read-only — it builds the PATCH URL.
+		`const editable = pkRaw !== null && c !== pkColumn;`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("inline cell edit wiring missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
 func TestNewRowFormRenders(t *testing.T) {
 	t.Parallel()
 
