@@ -126,25 +126,25 @@ func inputKind(c schema.Column) string {
 }
 
 // filterHint returns a placeholder hint for the table-view filter input
-// for a column. Filter values use PostgREST-style operator prefixes
-// (eq.x, gt.0, ...), not bare values; the hint is what should appear in
-// the input's placeholder to guide the user past the most common
-// mistake of typing a bare value.
+// for a column. The first form is the bare value; the table-view JS
+// auto-prefixes it with the kind-default operator (cs for json, eq for
+// the rest) so users can search without typing the prefix. Subsequent
+// forms show the explicit PostgREST operators that override the default.
 func filterHint(c schema.Column) string {
 	switch inputKind(c) {
 	case "boolean":
-		return "eq.true, is.null"
+		return "true, eq.true, is.null"
 	case "integer":
-		return "eq.10, gt.0, lt.100, in.(1,2,3)"
+		return "10, gt.0, lt.100, in.(1,2,3)"
 	case "number":
-		return "eq.10.5, gt.0, lt.100"
+		return "10.5, gt.0, lt.100"
 	case "date":
-		return "eq.2026-01-01, gte.2026-01-01"
+		return "2026-01-01, gte.2026-01-01"
 	case "json":
-		return `cs.["a"], cd.[...], is.null`
+		return `["a"], cs.[...], cd.[...], is.null`
 	}
 
-	return "eq.foo, like.*foo*, ilike.*foo*"
+	return "foo, like.*foo*, ilike.*foo*"
 }
 
 // SinglePKColumn returns the lone PK column or "" if the table has a

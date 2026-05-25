@@ -30,7 +30,7 @@
   {{range .Columns}}
   <div>
     <label class="block text-zinc-500 text-xs mb-1">{{.Name}}=</label>
-    <input name="{{.Name}}" placeholder="{{filterHint .}}"
+    <input name="{{.Name}}" data-filter-kind="{{inputKind .}}" placeholder="{{filterHint .}}"
       class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
   </div>
   {{end}}
@@ -130,10 +130,26 @@
       return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    // operatorPrefix matches PostgREST-style filter values that already
+    // carry an operator (e.g., "eq.42", "not.cs.[...]"). Used by buildURL
+    // to decide whether a bare value should get a kind-default prefix.
+    const operatorPrefix = /^(not\.)?(eq|neq|gt|gte|lt|lte|like|ilike|in|is|cs|cd)\./;
+
     function buildURL() {
       const url = new URL(apiOrigin + '/' + tableName);
       new FormData(form).forEach((v, k) => {
-        if (v !== '' && v != null) url.searchParams.set(k, String(v));
+        if (v === '' || v == null) return;
+        let value = String(v);
+        const input = form.elements[k];
+        const kind = input && input.dataset && input.dataset.filterKind;
+        // Auto-prefix the kind-default operator when the user types a
+        // bare value: cs. for json (containment), eq. for everything
+        // else (exact match). Power users override by typing an
+        // explicit operator (like.*foo*, gt.0, is.null, ...).
+        if (kind && !operatorPrefix.test(value)) {
+          value = (kind === 'json' ? 'cs.' : 'eq.') + value;
+        }
+        url.searchParams.set(k, value);
       });
       return url;
     }
