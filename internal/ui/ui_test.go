@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -354,6 +355,82 @@ func TestOutgoingFKsSkipsCompositeFKs(t *testing.T) {
 	got := ui.OutgoingFKs(tbl)
 	if len(got) != 1 || got["a"].Table != "x" {
 		t.Errorf("outgoingFKs = %+v, want single entry for column a → x", got)
+	}
+}
+
+func TestReferencedByListSkipsCompositeFKsAndPreservesOrder(t *testing.T) {
+	t.Parallel()
+
+	tbl := &schema.Table{
+		ReferencedBy: []schema.ForeignKey{
+			{Table: "public.a", Columns: []string{"x"}, References: []string{"id"}},
+			{Table: "public.b", Columns: []string{"y", "z"}, References: []string{"k1", "k2"}},
+			{Table: "public.c", Columns: []string{"w"}, References: []string{"id"}},
+		},
+	}
+
+	got := ui.ReferencedByList(tbl)
+	want := []ui.FKRef{
+		{Table: "a", Column: "x"},
+		{Table: "c", Column: "w"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("referencedByList = %+v, want %+v", got, want)
+	}
+}
+
+func TestRowViewRendersMultipleReferencedByEntries(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema:     "public",
+				Name:       "users",
+				Columns:    []schema.Column{{Name: "id", Type: "bigint"}},
+				PrimaryKey: []string{"id"},
+				ReferencedBy: []schema.ForeignKey{
+					{Table: "public.posts", Columns: []string{"author_id"}, References: []string{"id"}},
+					{Table: "public.comments", Columns: []string{"user_id"}, References: []string{"id"}},
+				},
+			},
+			{
+				Schema:     "public",
+				Name:       "posts",
+				Columns:    []schema.Column{{Name: "id", Type: "bigint"}},
+				PrimaryKey: []string{"id"},
+			},
+			{
+				Schema:     "public",
+				Name:       "comments",
+				Columns:    []schema.Column{{Name: "id", Type: "bigint"}},
+				PrimaryKey: []string{"id"},
+			},
+		},
+	}
+
+	ts := newTestUIServer(t, sch)
+
+	resp := httpGet(t, ts.URL+"/t/users/r/42")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`href="/t/posts?author_id=eq.42&order=author_id.asc"`,
+		`posts.author_id = 42`,
+		`href="/t/comments?user_id=eq.42&order=user_id.asc"`,
+		`comments.user_id = 42`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("users row view missing %q\n---body---\n%s", want, body)
+		}
+	}
+
+	postsIdx := strings.Index(body, "posts.author_id = 42")
+	commentsIdx := strings.Index(body, "comments.user_id = 42")
+	if postsIdx < 0 || commentsIdx < 0 || postsIdx >= commentsIdx {
+		t.Errorf("expected posts.author_id before comments.user_id; postsIdx=%d commentsIdx=%d", postsIdx, commentsIdx)
 	}
 }
 

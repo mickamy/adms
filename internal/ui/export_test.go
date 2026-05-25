@@ -18,4 +18,8 @@ func OutgoingFKs(t *schema.Table) map[string]FKRef {
 	return outgoingFKs(t)
 }
 
+func ReferencedByList(t *schema.Table) []FKRef {
+	return referencedByList(t)
+}
+
 type FKRef = fkRef
