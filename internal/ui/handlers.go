@@ -29,8 +29,8 @@ type layoutData struct {
 // (otherTable.column → this row), so the templates can build links
 // without re-walking the schema.
 type fkRef struct {
-	Column string `json:"column"`
-	Table  string `json:"table"`
+	Column string
+	Table  string
 }
 
 // bareTableName strips the "schema." prefix that introspection attaches to
@@ -138,7 +138,6 @@ func (s *Server) newRow(w http.ResponseWriter, r *http.Request) {
 		ActiveTable:  t.Name,
 		ContentTmpl:  "content_new.html",
 		ContentTable: t,
-		OutgoingFKs:  outgoingFKs(t),
 	})
 }
 
