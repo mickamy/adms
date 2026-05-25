@@ -48,6 +48,10 @@ func (mysqlIntrospector) Introspect(ctx context.Context, db *sql.DB, allowedSche
 		return Schema{}, fmt.Errorf("attach referenced_by: %w", err)
 	}
 
+	if err := mysqlAttachIndexes(ctx, db, allowedSchemas, index); err != nil {
+		return Schema{}, fmt.Errorf("attach indexes: %w", err)
+	}
+
 	return Schema{Tables: tables}, nil
 }
 
@@ -269,6 +273,45 @@ func mysqlAttachFKs(ctx context.Context, db *sql.DB, query string, args []any,
 	defer func() { _ = rows.Close() }()
 
 	return attachFKs(rows, index, direction)
+}
+
+// mysqlAttachIndexes loads index columns from information_schema.statistics
+// and stream-aggregates them via the shared attachIndexes helper. Rows
+// with NULL column_name (functional / expression indexes in MySQL 8) are
+// filtered out at SQL level for the same reason pgAttachIndexes drops
+// expression entries. The boolean polarity is rendered through CASE so
+// the driver does not have to guess the type of a comparison expression,
+// and INDEX_TYPE is lower-cased to match the values pg_am.amname uses.
+// MySQL has no first-class partial indexes, so where_expr is always ”.
+func mysqlAttachIndexes(ctx context.Context, db *sql.DB, schemas []string, index map[tableKey]*Table) error {
+	if len(schemas) == 0 {
+		return nil
+	}
+
+	placeholders, args := mysqlInPlaceholders(schemas)
+	//nolint:gosec // placeholders is a fixed list of "?" derived from len(schemas), not user input
+	query := `
+		SELECT
+			table_schema,
+			table_name,
+			index_name,
+			CASE WHEN non_unique = 0 THEN TRUE ELSE FALSE END AS is_unique,
+			column_name,
+			LOWER(index_type) AS method,
+			'' AS where_expr
+		FROM information_schema.statistics
+		WHERE table_schema IN (` + placeholders + `)
+		  AND column_name IS NOT NULL
+		ORDER BY table_schema, table_name, index_name, seq_in_index
+	`
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return attachIndexes(rows, index)
 }
 
 func mysqlInPlaceholders(values []string) (string, []any) {

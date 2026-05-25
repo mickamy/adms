@@ -47,8 +47,10 @@ func TestMySQLIntrospect(t *testing.T) {
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
 			user_id BIGINT UNSIGNED NOT NULL,
 			title VARCHAR(255) NOT NULL,
-			CONSTRAINT fk_introspect_posts_user FOREIGN KEY (user_id) REFERENCES introspect_users(id)
+			CONSTRAINT fk_introspect_posts_user FOREIGN KEY (user_id) REFERENCES introspect_users(id),
+			INDEX introspect_posts_user_title_idx (user_id, title)
 		)`,
+		`CREATE UNIQUE INDEX introspect_users_email_idx ON introspect_users(email)`,
 	}
 
 	for _, s := range stmts {
@@ -83,4 +85,20 @@ func TestMySQLIntrospect(t *testing.T) {
 
 	assertFK(t, "posts → users", posts.ForeignKeys, "adms_test.introspect_users", []string{"user_id"}, []string{"id"})
 	assertFK(t, "users ← posts", users.ReferencedBy, "adms_test.introspect_posts", []string{"user_id"}, []string{"id"})
+
+	// MySQL names the implicit PK index "PRIMARY". The unique index on
+	// email is named explicitly. posts' FK declaration also creates an
+	// implicit index on user_id — we only assert the explicit composite
+	// one to keep the test focused on what we own. InnoDB defaults to
+	// btree for all of the above, lower-cased to match Postgres values.
+	assertHasIndex(t, "users", users.Indexes, indexExpect{
+		name: "PRIMARY", cols: []string{"id"}, unique: true, method: "btree",
+	})
+	assertHasIndex(t, "users", users.Indexes, indexExpect{
+		name: "introspect_users_email_idx", cols: []string{"email"}, unique: true, method: "btree",
+	})
+	assertHasIndex(t, "posts", posts.Indexes, indexExpect{
+		name: "introspect_posts_user_title_idx", cols: []string{"user_id", "title"},
+		unique: false, method: "btree",
+	})
 }

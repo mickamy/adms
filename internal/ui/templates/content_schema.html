@@ -86,6 +86,8 @@
       {{.Name}}
       ({{range $i, $col := .Columns}}{{if $i}}, {{end}}{{$col}}{{end}})
       {{if .Unique}}<span class="text-zinc-500 text-xs ml-2 font-sans">UNIQUE</span>{{end}}
+      {{if .Method}}<span class="text-zinc-500 text-xs ml-2 font-sans">{{.Method}}</span>{{end}}
+      {{if .Where}}<span class="text-zinc-500 text-xs ml-2 font-sans">WHERE {{.Where}}</span>{{end}}
     </li>
     {{end}}
   </ul>
