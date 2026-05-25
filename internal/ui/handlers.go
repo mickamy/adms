@@ -3,6 +3,7 @@ package ui
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/mickamy/adms/internal/logger"
 	"github.com/mickamy/adms/internal/schema"
@@ -18,6 +19,68 @@ type layoutData struct {
 	ContentTable *schema.Table
 	RowPKColumn  string
 	RowPK        string
+	OutgoingFKs  map[string]fkRef
+	ReferencedBy []fkRef
+}
+
+// fkRef is the half of a single-column foreign key the UI cares about:
+// the other table's bare name and the column inside it. Used both for
+// outgoing FKs (this column → otherTable.column) and incoming FKs
+// (otherTable.column → this row), so the templates can build links
+// without re-walking the schema.
+type fkRef struct {
+	Column string `json:"column"`
+	Table  string `json:"table"`
+}
+
+// bareTableName strips the "schema." prefix that introspection attaches to
+// referenced tables, since UI URLs are keyed by the bare name only.
+func bareTableName(qualified string) string {
+	if i := strings.LastIndex(qualified, "."); i >= 0 {
+		return qualified[i+1:]
+	}
+
+	return qualified
+}
+
+// outgoingFKs returns a map from local-column-name → referenced table/column
+// for single-column FKs. Composite FKs are dropped because the UI cannot
+// encode them in a single URL hop.
+func outgoingFKs(t *schema.Table) map[string]fkRef {
+	out := make(map[string]fkRef, len(t.ForeignKeys))
+
+	for _, fk := range t.ForeignKeys {
+		if len(fk.Columns) != 1 || len(fk.References) != 1 {
+			continue
+		}
+
+		out[fk.Columns[0]] = fkRef{
+			Table:  bareTableName(fk.Table),
+			Column: fk.References[0],
+		}
+	}
+
+	return out
+}
+
+// referencedByList returns each single-column incoming FK as a remote
+// table/column pair so the row detail can link to filtered lists of
+// children rows.
+func referencedByList(t *schema.Table) []fkRef {
+	out := make([]fkRef, 0, len(t.ReferencedBy))
+
+	for _, fk := range t.ReferencedBy {
+		if len(fk.Columns) != 1 || len(fk.References) != 1 {
+			continue
+		}
+
+		out = append(out, fkRef{
+			Table:  bareTableName(fk.Table),
+			Column: fk.Columns[0],
+		})
+	}
+
+	return out
 }
 
 // SinglePKColumn returns the lone PK column or "" if the table has a
@@ -58,6 +121,7 @@ func (s *Server) tableView(w http.ResponseWriter, r *http.Request) {
 		ContentTmpl:  "content_table.html",
 		ContentTable: t,
 		RowPKColumn:  s.singlePKColumn(t),
+		OutgoingFKs:  outgoingFKs(t),
 	})
 }
 
@@ -74,6 +138,7 @@ func (s *Server) newRow(w http.ResponseWriter, r *http.Request) {
 		ActiveTable:  t.Name,
 		ContentTmpl:  "content_new.html",
 		ContentTable: t,
+		OutgoingFKs:  outgoingFKs(t),
 	})
 }
 
@@ -104,6 +169,8 @@ func (s *Server) rowView(w http.ResponseWriter, r *http.Request) {
 		ContentTable: t,
 		RowPKColumn:  pkCol,
 		RowPK:        r.PathValue("pk"),
+		OutgoingFKs:  outgoingFKs(t),
+		ReferencedBy: referencedByList(t),
 	})
 }
 
