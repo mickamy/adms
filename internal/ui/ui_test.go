@@ -157,8 +157,11 @@ func TestSchemaViewRendersTableMetadata(t *testing.T) {
 					{Table: "public.posts", Columns: []string{"user_id"}, References: []string{"id"}},
 				},
 				Indexes: []schema.Index{
-					{Name: "users_pkey", Columns: []string{"id"}, Unique: true},
-					{Name: "users_email_idx", Columns: []string{"email"}, Unique: true},
+					{Name: "users_pkey", Columns: []string{"id"}, Unique: true, Method: "btree"},
+					{
+						Name: "users_email_idx", Columns: []string{"email"},
+						Unique: true, Method: "btree", Where: "deleted_at IS NULL",
+					},
 				},
 			},
 			{
@@ -212,6 +215,8 @@ func TestSchemaViewRendersTableMetadata(t *testing.T) {
 		`users_pkey`,
 		`users_email_idx`,
 		`>UNIQUE</span>`,
+		`>btree</span>`,
+		`>WHERE deleted_at IS NULL</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("schema view missing %q\n---body---\n%s", want, body)

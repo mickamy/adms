@@ -5,6 +5,7 @@ package schema_test
 import (
 	"database/sql"
 	"os"
+	"strings"
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -48,6 +49,9 @@ func TestPostgresIntrospect(t *testing.T) {
 			title TEXT NOT NULL
 		)`,
 		`COMMENT ON COLUMN introspect_users.email IS 'optional email address'`,
+		`CREATE UNIQUE INDEX introspect_users_email_idx ON introspect_users(email)`,
+		`CREATE INDEX introspect_posts_user_title_idx ON introspect_posts(user_id, title)`,
+		`CREATE INDEX introspect_users_active_idx ON introspect_users(name) WHERE email IS NOT NULL`,
 	}
 
 	for _, s := range stmts {
@@ -81,6 +85,22 @@ func TestPostgresIntrospect(t *testing.T) {
 
 	assertFK(t, "posts → users", posts.ForeignKeys, "public.introspect_users", []string{"user_id"}, []string{"id"})
 	assertFK(t, "users ← posts", users.ReferencedBy, "public.introspect_posts", []string{"user_id"}, []string{"id"})
+
+	assertHasIndex(t, "users", users.Indexes, indexExpect{
+		name: "introspect_users_pkey", cols: []string{"id"}, unique: true, method: "btree",
+	})
+	assertHasIndex(t, "users", users.Indexes, indexExpect{
+		name: "introspect_users_email_idx", cols: []string{"email"}, unique: true, method: "btree",
+	})
+	assertHasIndex(t, "posts", posts.Indexes, indexExpect{
+		name: "introspect_posts_user_title_idx", cols: []string{"user_id", "title"},
+		unique: false, method: "btree",
+	})
+	// Partial-index predicate is captured into Index.Where.
+	assertHasIndex(t, "users", users.Indexes, indexExpect{
+		name: "introspect_users_active_idx", cols: []string{"name"},
+		unique: false, method: "btree", whereContains: "email IS NOT NULL",
+	})
 }
 
 func findTables(t *testing.T, s schema.Schema, usersName, postsName string) (users, posts *schema.Table) {
@@ -147,6 +167,48 @@ func assertFK(t *testing.T, label string, fks []schema.ForeignKey, wantTable str
 	if !equalSlice(fk.References, wantRefs) {
 		t.Errorf("%s References = %v, want %v", label, fk.References, wantRefs)
 	}
+}
+
+// indexExpect collects the per-index assertions so callers can opt into
+// checking method / partial-predicate when relevant without bloating the
+// happy-path call sites.
+type indexExpect struct {
+	name          string
+	cols          []string
+	unique        bool
+	method        string // exact match if non-empty
+	whereContains string // substring match if non-empty
+}
+
+func assertHasIndex(t *testing.T, label string, indexes []schema.Index, want indexExpect) {
+	t.Helper()
+
+	for _, idx := range indexes {
+		if idx.Name != want.name {
+			continue
+		}
+
+		if !equalSlice(idx.Columns, want.cols) {
+			t.Errorf("%s index %q Columns = %v, want %v", label, want.name, idx.Columns, want.cols)
+		}
+
+		if idx.Unique != want.unique {
+			t.Errorf("%s index %q Unique = %v, want %v", label, want.name, idx.Unique, want.unique)
+		}
+
+		if want.method != "" && idx.Method != want.method {
+			t.Errorf("%s index %q Method = %q, want %q", label, want.name, idx.Method, want.method)
+		}
+
+		if want.whereContains != "" && !strings.Contains(idx.Where, want.whereContains) {
+			t.Errorf("%s index %q Where = %q, want substring %q",
+				label, want.name, idx.Where, want.whereContains)
+		}
+
+		return
+	}
+
+	t.Errorf("%s missing index %q; have %+v", label, want.name, indexes)
 }
 
 func equalSlice(a, b []string) bool {
