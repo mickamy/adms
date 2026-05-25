@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -28,15 +29,22 @@ func sampleSchema() schema.Schema {
 					{Name: "name", Type: "text"},
 				},
 				PrimaryKey: []string{"id"},
+				ReferencedBy: []schema.ForeignKey{
+					{Table: "public.posts", Columns: []string{"user_id"}, References: []string{"id"}},
+				},
 			},
 			{
 				Schema: "public",
 				Name:   "posts",
 				Columns: []schema.Column{
 					{Name: "id", Type: "bigint"},
+					{Name: "user_id", Type: "bigint"},
 					{Name: "title", Type: "text"},
 				},
 				PrimaryKey: []string{"id"},
+				ForeignKeys: []schema.ForeignKey{
+					{Table: "public.users", Columns: []string{"user_id"}, References: []string{"id"}},
+				},
 			},
 		},
 	}
@@ -248,6 +256,181 @@ func TestTableViewUnknownReturns404(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestTableViewExposesOutgoingFKs(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	// posts.user_id → users(id) — the JS map needs to know it.
+	resp := httpGet(t, ts.URL+"/t/posts")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+	if !strings.Contains(body, `"user_id": { table: "users", column: "id" }`) {
+		t.Errorf("outgoing FK map missing from table view\n---body---\n%s", body)
+	}
+}
+
+func TestRowViewLinksOutgoingFKAndListsReferencedBy(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	// posts row: outgoing FK posts.user_id → users(id) should appear in JS.
+	resp := httpGet(t, ts.URL+"/t/posts/r/9")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+	if !strings.Contains(body, `"user_id": { table: "users", column: "id" }`) {
+		t.Errorf("outgoing FK map missing from posts row view")
+	}
+
+	// users row: ReferencedBy posts.user_id should render as a section link.
+	uresp := httpGet(t, ts.URL+"/t/users/r/1")
+	defer func() { _ = uresp.Body.Close() }()
+
+	ubody := readAll(t, uresp)
+
+	for _, want := range []string{
+		`>Referenced by<`,
+		`href="/t/posts?user_id=eq.1&order=user_id.asc"`,
+		`posts.user_id = 1`,
+	} {
+		if !strings.Contains(ubody, want) {
+			t.Errorf("users row view missing %q\n---body---\n%s", want, ubody)
+		}
+	}
+}
+
+func TestRowViewSkipsReferencedBySection(t *testing.T) {
+	// posts row has no incoming FKs in the sample schema, so the
+	// "Referenced by" header should not render at all.
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/posts/r/9")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+	if strings.Contains(body, "Referenced by") {
+		t.Errorf("posts row should not render Referenced by section\n---body---\n%s", body)
+	}
+}
+
+func TestBareTableName(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in, want string
+	}{
+		{"public.users", "users"},
+		{"users", "users"},
+		{"weird.dotted.name", "name"},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		if got := ui.BareTableName(tc.in); got != tc.want {
+			t.Errorf("bareTableName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestOutgoingFKsSkipsCompositeFKs(t *testing.T) {
+	t.Parallel()
+
+	tbl := &schema.Table{
+		Columns:    []schema.Column{{Name: "a"}, {Name: "b"}, {Name: "c"}},
+		PrimaryKey: []string{"a"},
+		ForeignKeys: []schema.ForeignKey{
+			{Table: "public.x", Columns: []string{"a"}, References: []string{"id"}},
+			{Table: "public.y", Columns: []string{"b", "c"}, References: []string{"k1", "k2"}},
+		},
+	}
+
+	got := ui.OutgoingFKs(tbl)
+	if len(got) != 1 || got["a"].Table != "x" {
+		t.Errorf("outgoingFKs = %+v, want single entry for column a → x", got)
+	}
+}
+
+func TestReferencedByListSkipsCompositeFKsAndPreservesOrder(t *testing.T) {
+	t.Parallel()
+
+	tbl := &schema.Table{
+		ReferencedBy: []schema.ForeignKey{
+			{Table: "public.a", Columns: []string{"x"}, References: []string{"id"}},
+			{Table: "public.b", Columns: []string{"y", "z"}, References: []string{"k1", "k2"}},
+			{Table: "public.c", Columns: []string{"w"}, References: []string{"id"}},
+		},
+	}
+
+	got := ui.ReferencedByList(tbl)
+	want := []ui.FKRef{
+		{Table: "a", Column: "x"},
+		{Table: "c", Column: "w"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("referencedByList = %+v, want %+v", got, want)
+	}
+}
+
+func TestRowViewRendersMultipleReferencedByEntries(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema:     "public",
+				Name:       "users",
+				Columns:    []schema.Column{{Name: "id", Type: "bigint"}},
+				PrimaryKey: []string{"id"},
+				ReferencedBy: []schema.ForeignKey{
+					{Table: "public.posts", Columns: []string{"author_id"}, References: []string{"id"}},
+					{Table: "public.comments", Columns: []string{"user_id"}, References: []string{"id"}},
+				},
+			},
+			{
+				Schema:     "public",
+				Name:       "posts",
+				Columns:    []schema.Column{{Name: "id", Type: "bigint"}},
+				PrimaryKey: []string{"id"},
+			},
+			{
+				Schema:     "public",
+				Name:       "comments",
+				Columns:    []schema.Column{{Name: "id", Type: "bigint"}},
+				PrimaryKey: []string{"id"},
+			},
+		},
+	}
+
+	ts := newTestUIServer(t, sch)
+
+	resp := httpGet(t, ts.URL+"/t/users/r/42")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`href="/t/posts?author_id=eq.42&order=author_id.asc"`,
+		`posts.author_id = 42`,
+		`href="/t/comments?user_id=eq.42&order=user_id.asc"`,
+		`comments.user_id = 42`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("users row view missing %q\n---body---\n%s", want, body)
+		}
+	}
+
+	postsIdx := strings.Index(body, "posts.author_id = 42")
+	commentsIdx := strings.Index(body, "comments.user_id = 42")
+	if postsIdx < 0 || commentsIdx < 0 || postsIdx >= commentsIdx {
+		t.Errorf("expected posts.author_id before comments.user_id; postsIdx=%d commentsIdx=%d", postsIdx, commentsIdx)
 	}
 }
 

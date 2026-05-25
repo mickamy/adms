@@ -62,6 +62,9 @@
     const tableName = {{.Name}};
     const columns = [{{range $i, $col := .Columns}}{{if $i}},{{end}}{{$col.Name}}{{end}}];
     const pkColumn = {{$.RowPKColumn}};
+    const outgoingFKs = {
+      {{range $col, $ref := $.OutgoingFKs}}{{$col}}: { table: {{$ref.Table}}, column: {{$ref.Column}} },{{end}}
+    };
     const apiOrigin = document.querySelector('meta[name="adms-api-origin"]').content;
     const form = document.getElementById('filters');
     const tbody = document.getElementById('rows');
@@ -111,9 +114,19 @@
       tbody.innerHTML = rows.map((row) => {
         const cells = columns.map((c) => {
           const v = row[c];
-          const cell = (v === null || v === undefined)
-            ? '<span class="text-zinc-600">null</span>'
-            : escapeHTML(typeof v === 'object' ? JSON.stringify(v) : v);
+          let cell;
+          if (v === null || v === undefined) {
+            cell = '<span class="text-zinc-600">null</span>';
+          } else {
+            const text = escapeHTML(typeof v === 'object' ? JSON.stringify(v) : v);
+            const ref = outgoingFKs[c];
+            if (ref) {
+              const target = '/t/' + encodeURIComponent(ref.table) + '/r/' + encodeURIComponent(String(v));
+              cell = `${text} <a href="${target}" class="text-zinc-500 hover:text-zinc-100 text-xs ml-1">→</a>`;
+            } else {
+              cell = text;
+            }
+          }
           return `<td class="px-3 py-2 align-top whitespace-pre-wrap">${cell}</td>`;
         }).join('');
         let actions = '';
