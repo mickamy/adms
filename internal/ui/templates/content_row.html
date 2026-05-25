@@ -55,6 +55,10 @@
     const outgoingFKs = {
       {{range $col, $ref := $.OutgoingFKs}}{{$col}}: { table: {{$ref.Table}}, column: {{$ref.Column}} },{{end}}
     };
+    const fkLinks = new Map();
+    document.querySelectorAll('[data-fk-link]').forEach((el) => {
+      fkLinks.set(el.dataset.fkLink, el);
+    });
     const form = document.getElementById('row-form');
     const status = document.getElementById('status');
 
@@ -83,7 +87,7 @@
     function updateFKLink(col) {
       const ref = outgoingFKs[col];
       if (!ref) return;
-      const link = document.querySelector(`[data-fk-link="${col}"]`);
+      const link = fkLinks.get(col);
       if (!link) return;
       const v = form.elements[col].value;
       if (v === '' || v === 'null') {
