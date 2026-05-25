@@ -125,6 +125,28 @@ func inputKind(c schema.Column) string {
 	return "text"
 }
 
+// filterHint returns a placeholder hint for the table-view filter input
+// for a column. Filter values use PostgREST-style operator prefixes
+// (eq.x, gt.0, ...), not bare values; the hint is what should appear in
+// the input's placeholder to guide the user past the most common
+// mistake of typing a bare value.
+func filterHint(c schema.Column) string {
+	switch inputKind(c) {
+	case "boolean":
+		return "eq.true, is.null"
+	case "integer":
+		return "eq.10, gt.0, lt.100, in.(1,2,3)"
+	case "number":
+		return "eq.10.5, gt.0, lt.100"
+	case "date":
+		return "eq.2026-01-01, gte.2026-01-01"
+	case "json":
+		return "eq.<exact json>, is.null"
+	}
+
+	return "eq.foo, like.*foo*, ilike.*foo*"
+}
+
 // SinglePKColumn returns the lone PK column or "" if the table has a
 // composite PK or no PK at all. The row-detail UI hides write actions in
 // that case because PostgREST-style URLs cannot encode multi-column

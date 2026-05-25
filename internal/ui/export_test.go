@@ -26,4 +26,8 @@ func InputKind(c schema.Column) string {
 	return inputKind(c)
 }
 
+func FilterHint(c schema.Column) string {
+	return filterHint(c)
+}
+
 type FKRef = fkRef

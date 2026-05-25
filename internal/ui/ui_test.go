@@ -467,6 +467,65 @@ func TestInputKind(t *testing.T) {
 	}
 }
 
+func TestFilterHint(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		typ      string
+		contains string
+	}{
+		{"boolean", "eq.true"},
+		{"tinyint(1)", "eq.true"},
+		{"bigint", "gt.0"},
+		{"integer", "in.(1,2,3)"},
+		{"numeric", "gt.0"},
+		{"double precision", "lt.100"},
+		{"date", "gte.2026"},
+		{"jsonb", "<exact json>"},
+		{"text[]", "<exact json>"},
+		{"text", "like.*foo*"},
+		{"timestamp with time zone", "like.*foo*"},
+	}
+
+	for _, tc := range cases {
+		got := ui.FilterHint(schema.Column{Type: tc.typ})
+		if !strings.Contains(got, tc.contains) {
+			t.Errorf("filterHint(%q) = %q, want substring %q", tc.typ, got, tc.contains)
+		}
+	}
+}
+
+func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, typedSchema())
+
+	resp := httpGet(t, ts.URL+"/t/alltypes")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// boolean column "active" → boolean hint
+		`name="active" placeholder="eq.true, is.null"`,
+		// integer column "id" → integer hint
+		`name="id" placeholder="eq.10, gt.0, lt.100, in.(1,2,3)"`,
+		// json column "meta" / array column "tags" → json hint
+		`name="meta" placeholder="eq.&lt;exact json&gt;, is.null"`,
+		`name="tags" placeholder="eq.&lt;exact json&gt;, is.null"`,
+		// date column "born" → date hint
+		`name="born" placeholder="eq.2026-01-01, gte.2026-01-01"`,
+		// number column "score" → number hint
+		`name="score" placeholder="eq.10.5, gt.0, lt.100"`,
+		// text column "name" → text hint
+		`name="name" placeholder="eq.foo, like.*foo*, ilike.*foo*"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("filter placeholder missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
 func typedSchema() schema.Schema {
 	return schema.Schema{
 		Tables: []schema.Table{
