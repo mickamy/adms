@@ -7,7 +7,9 @@
   </div>
   <div class="flex items-center gap-3">
     <div class="text-sm text-zinc-400" id="content-range">—</div>
+    {{if not $.ReadOnly}}
     <a href="/t/{{.Name}}/new" class="px-3 py-1 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">+ New</a>
+    {{end}}
   </div>
 </div>
 
@@ -41,7 +43,7 @@
     <thead class="bg-zinc-900 text-zinc-400">
       <tr>
         {{range .Columns}}<th data-col="{{.Name}}" class="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none">{{.Name}}<span class="text-zinc-600 text-xs ml-1">{{.Type}}</span></th>{{end}}
-        {{if $.RowPKColumn}}<th class="px-3 py-2 text-right font-medium">actions</th>{{end}}
+        {{if and $.RowPKColumn (not $.ReadOnly)}}<th class="px-3 py-2 text-right font-medium">actions</th>{{end}}
       </tr>
     </thead>
     <tbody id="rows" class="divide-y divide-zinc-800">
@@ -57,7 +59,7 @@
     class="px-3 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">Next</button>
 </div>
 
-{{if $.RowPKColumn}}
+{{if and $.RowPKColumn (not $.ReadOnly)}}
 <dialog id="edit-modal" class="rounded-lg p-0 bg-transparent backdrop:bg-black/60">
   <form id="edit-form" class="space-y-3 bg-zinc-950 text-zinc-100 border border-zinc-800 rounded-lg p-6 w-[40rem] max-w-[90vw]">
     <header class="flex items-start justify-between gap-4 mb-2">
@@ -117,6 +119,7 @@
     const tableName = {{.Name}};
     const columns = [{{range $i, $col := .Columns}}{{if $i}},{{end}}{{$col.Name}}{{end}}];
     const pkColumn = {{$.RowPKColumn}};
+    const uiReadOnly = {{$.ReadOnly}};
     const outgoingFKs = {
       {{range $col, $ref := $.OutgoingFKs}}{{$col}}: { table: {{$ref.Table}}, column: {{$ref.Column}} },{{end}}
     };
@@ -127,7 +130,7 @@
     const form = document.getElementById('filters');
     const tbody = document.getElementById('rows');
     const rangeEl = document.getElementById('content-range');
-    const colSpan = columns.length + (pkColumn ? 1 : 0);
+    const colSpan = columns.length + (pkColumn && !uiReadOnly ? 1 : 0);
     let currentRows = [];
 
     function escapeHTML(s) {
@@ -208,8 +211,9 @@
           // (used to construct the PATCH URL). The dblclick handler
           // below reads data-col / data-row-pk to start an in-place
           // edit; the FK arrow has its own <a> so click bubbles are
-          // filtered there.
-          const editable = pkRaw !== null && c !== pkColumn;
+          // filtered there. Read-only deployments skip the attributes
+          // so dblclick has nothing to match.
+          const editable = !uiReadOnly && pkRaw !== null && c !== pkColumn;
           const editAttrs = editable
             ? ` data-col="${escapeHTML(c)}" data-row-pk="${escapeHTML(pkRaw)}"`
             : '';
@@ -217,7 +221,7 @@
           return `<td class="px-3 py-2 align-top whitespace-pre-wrap${editClass}"${editAttrs}>${cell}</td>`;
         }).join('');
         let actions = '';
-        if (pkColumn) {
+        if (pkColumn && !uiReadOnly) {
           const pkVal = encodeURIComponent(pkRaw);
           actions = `<td class="px-3 py-2 align-top text-right whitespace-nowrap">
             <button type="button" data-edit-pk="${pkVal}" class="text-zinc-300 hover:text-zinc-100 mr-3">edit</button>
@@ -366,7 +370,7 @@
       });
     }
 
-    if (pkColumn) {
+    if (pkColumn && !uiReadOnly) {
       tbody.addEventListener('click', async (e) => {
         const editBtn = e.target.closest('[data-edit-pk]');
         if (editBtn) {

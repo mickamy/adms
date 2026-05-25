@@ -190,6 +190,15 @@ func (s *Server) tableView(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) newRow(w http.ResponseWriter, r *http.Request) {
+	// The new-row form is purely a write affordance; in read-only mode
+	// the API would 403 on POST anyway, so serve the page itself as 404
+	// to keep the UI honest about what is possible.
+	if s.readOnly {
+		http.NotFound(w, r)
+
+		return
+	}
+
 	t := s.findTable(r.PathValue("table"))
 	if t == nil {
 		http.NotFound(w, r)
