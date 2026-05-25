@@ -31,6 +31,7 @@ var staticFS embed.FS
 type Server struct {
 	addr      string
 	apiOrigin string
+	authToken string
 	schema    schema.Schema
 	readOnly  bool
 	tmpl      *template.Template
@@ -53,6 +54,7 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 	return &Server{
 		addr:      cfg.UI.Listen,
 		apiOrigin: apiOrigin,
+		authToken: cfg.AuthToken,
 		schema:    sch,
 		readOnly:  cfg.ReadOnly,
 		tmpl:      tmpl,

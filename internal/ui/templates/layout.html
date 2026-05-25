@@ -6,6 +6,34 @@
   <title>{{.Title}}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <meta name="adms-api-origin" content="{{.APIOrigin}}">
+  {{if .AuthToken}}<meta name="adms-auth-token" content="{{.AuthToken}}">{{end}}
+  <script>
+    (function () {
+      const tokenMeta = document.querySelector('meta[name="adms-auth-token"]');
+      if (!tokenMeta || !tokenMeta.content) return;
+      const apiMeta = document.querySelector('meta[name="adms-api-origin"]');
+      if (!apiMeta || !apiMeta.content) return;
+      let apiURL;
+      try { apiURL = new URL(apiMeta.content); } catch (_) { return; }
+      const token = tokenMeta.content;
+      const origFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        const url = typeof input === 'string' ? input
+                  : input instanceof Request ? input.url
+                  : String(input);
+        let target;
+        try { target = new URL(url, location.href); } catch (_) { return origFetch(input, init); }
+        if (target.origin !== apiURL.origin) return origFetch(input, init);
+        const opts = init ? Object.assign({}, init) : {};
+        const headers = new Headers(opts.headers || {});
+        if (!headers.has('Authorization')) {
+          headers.set('Authorization', 'Bearer ' + token);
+        }
+        opts.headers = headers;
+        return origFetch(input, opts);
+      };
+    })();
+  </script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex">
   <aside class="w-64 shrink-0 border-r border-zinc-800 p-4 overflow-y-auto h-screen sticky top-0">

@@ -434,6 +434,66 @@ func TestRowViewRendersMultipleReferencedByEntries(t *testing.T) {
 	}
 }
 
+func newTestUIServerWithToken(t *testing.T, sch schema.Schema, token string) *httptest.Server {
+	t.Helper()
+
+	srv, err := ui.New(
+		config.Config{UI: config.UIConfig{Listen: ":0"}, AuthToken: token},
+		sch, apiOrigin,
+	)
+	if err != nil {
+		t.Fatalf("ui.New: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+
+	return ts
+}
+
+func TestLayoutOmitsAuthMetaWhenNoToken(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+	if strings.Contains(body, `<meta name="adms-auth-token"`) {
+		t.Errorf("layout should omit adms-auth-token meta when no token configured\n---body---\n%s", body)
+	}
+}
+
+func TestLayoutEmitsAuthMetaAndFetchWrapperWhenTokenSet(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServerWithToken(t, sampleSchema(), "sekret-1234")
+
+	resp := httpGet(t, ts.URL+"/")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`<meta name="adms-auth-token" content="sekret-1234">`,
+		`'Bearer ' + token`,
+		`headers.set('Authorization'`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("layout missing %q with auth token configured\n---body---\n%s", want, body)
+		}
+	}
+
+	// The wrapper must run before content <script>s that fire their
+	// initial fetch synchronously, so it has to live inside <head>.
+	headEnd := strings.Index(body, "</head>")
+	wrapperIdx := strings.Index(body, "headers.set('Authorization'")
+	if headEnd < 0 || wrapperIdx < 0 || wrapperIdx >= headEnd {
+		t.Errorf("fetch wrapper must appear inside <head>; headEnd=%d wrapperIdx=%d", headEnd, wrapperIdx)
+	}
+}
+
 func TestHealthz(t *testing.T) {
 	t.Parallel()
 

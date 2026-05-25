@@ -11,6 +11,7 @@ import (
 
 type layoutData struct {
 	APIOrigin    string
+	AuthToken    string
 	ReadOnly     bool
 	Tables       []schema.Table
 	ActiveTable  string
@@ -185,6 +186,7 @@ func (s *Server) findTable(name string) *schema.Table {
 
 func (s *Server) renderLayout(w http.ResponseWriter, r *http.Request, data layoutData) {
 	data.APIOrigin = s.apiOrigin
+	data.AuthToken = s.authToken
 	data.ReadOnly = s.readOnly
 	data.Tables = s.schema.Tables
 
