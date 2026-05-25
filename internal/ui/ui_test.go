@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -227,7 +228,8 @@ func TestTableViewEmitsInlineCellEditWiring(t *testing.T) {
 		`function createCellEditInput(kind)`,
 		`function saveCellEdit(col, pk, value)`,
 		// PK column must remain read-only — it builds the PATCH URL.
-		`const editable = pkRaw !== null && c !== pkColumn;`,
+		// Read-only deployments turn this off entirely.
+		`const editable = !uiReadOnly && pkRaw !== null && c !== pkColumn;`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("inline cell edit wiring missing %q\n---body---\n%s", want, body)
@@ -776,6 +778,156 @@ func newTestUIServerWithToken(t *testing.T, sch schema.Schema, token string) *ht
 	t.Cleanup(ts.Close)
 
 	return ts
+}
+
+func newTestUIServerReadOnly(t *testing.T, sch schema.Schema) *httptest.Server {
+	t.Helper()
+
+	srv, err := ui.New(
+		config.Config{UI: config.UIConfig{Listen: ":0"}, ReadOnly: true},
+		sch, apiOrigin,
+	)
+	if err != nil {
+		t.Fatalf("ui.New: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+
+	return ts
+}
+
+func TestTableViewReadOnlyHidesWriteAffordances(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServerReadOnly(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, forbidden := range []string{
+		`href="/t/users/new"`,
+		`<dialog id="edit-modal"`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("read-only table view should not emit %q\n---body---\n%s", forbidden, body)
+		}
+	}
+
+	// Match the whole `<th>actions</th>` shape so a future whitespace /
+	// attribute tweak inside the cell does not silently let the column
+	// header slip back into the read-only build.
+	if regexp.MustCompile(`<th[^>]*>\s*actions\s*</th>`).MatchString(body) {
+		t.Errorf("read-only table view should not render an actions column header\n---body---\n%s", body)
+	}
+
+	// Whitespace tolerance: html/template's JS escaper pads booleans
+	// with surrounding spaces and that's an implementation detail we
+	// don't want the test pinned to.
+	if !regexp.MustCompile(`const uiReadOnly\s*=\s*true\b`).MatchString(body) {
+		t.Errorf("read-only table view should expose a truthy uiReadOnly to the IIFE\n---body---\n%s", body)
+	}
+}
+
+func TestTableViewCompositePKAndReadOnlyBothGateOut(t *testing.T) {
+	// Both gates of `{{if and $.RowPKColumn (not $.ReadOnly)}}` should
+	// hold independently; this test exercises the case where both are
+	// false so a regression that drops one of them would still be
+	// caught by a single inspection.
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema: "public",
+				Name:   "joinrow",
+				Columns: []schema.Column{
+					{Name: "a", Type: "bigint"},
+					{Name: "b", Type: "bigint"},
+				},
+				PrimaryKey: []string{"a", "b"},
+			},
+		},
+	}
+
+	ts := newTestUIServerReadOnly(t, sch)
+
+	resp := httpGet(t, ts.URL+"/t/joinrow")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, forbidden := range []string{
+		`<dialog id="edit-modal"`,
+		`href="/t/joinrow/new"`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("composite-PK + read-only table view should not emit %q\n---body---\n%s", forbidden, body)
+		}
+	}
+
+	if regexp.MustCompile(`<th[^>]*>\s*actions\s*</th>`).MatchString(body) {
+		t.Errorf("composite-PK + read-only table view should not render an actions column header\n---body---\n%s", body)
+	}
+}
+
+func TestRowViewReadOnlyDisablesForm(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServerReadOnly(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users/r/1")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`<fieldset disabled`,
+		`Read-only mode · writes disabled`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("read-only row view missing %q\n---body---\n%s", want, body)
+		}
+	}
+
+	if !regexp.MustCompile(`const uiReadOnly\s*=\s*true\b`).MatchString(body) {
+		t.Errorf("read-only row view should expose a truthy uiReadOnly to the IIFE\n---body---\n%s", body)
+	}
+
+	// preventDefault has to run before the uiReadOnly gate so an Enter
+	// keystroke inside an input does not trigger the browser's default
+	// GET submission. Lock the order in so a regression cannot slip the
+	// preventDefault back inside `if (!uiReadOnly) { ... }`.
+	preventDefaultRe := regexp.MustCompile(
+		`(?s)form\.addEventListener\('submit'.*?e\.preventDefault\(\);\s*if\s*\(uiReadOnly\)\s*return;`,
+	)
+	if !preventDefaultRe.MatchString(body) {
+		t.Errorf("row form submit handler must call e.preventDefault() unconditionally before the uiReadOnly gate")
+	}
+
+	for _, forbidden := range []string{
+		`type="submit"`,
+		`id="delete"`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("read-only row view should not emit %q\n---body---\n%s", forbidden, body)
+		}
+	}
+}
+
+func TestNewRowInReadOnlyReturns404(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServerReadOnly(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users/new")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
 }
 
 func TestLayoutOmitsAuthMetaWhenNoToken(t *testing.T) {

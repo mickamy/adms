@@ -9,6 +9,7 @@
 </div>
 
 <form id="row-form" class="space-y-3 max-w-2xl">
+  <fieldset{{if $.ReadOnly}} disabled{{end}} class="space-y-3 border-0 p-0 m-0">
   {{range .Columns}}
   <div>
     <label class="block text-zinc-400 text-sm mb-1">
@@ -44,9 +45,14 @@
     </div>
   </div>
   {{end}}
+  </fieldset>
   <div class="flex gap-2 items-center pt-2">
+    {{if not $.ReadOnly}}
     <button type="submit" class="px-3 py-1.5 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">Save</button>
     <button type="button" id="delete" class="px-3 py-1.5 rounded bg-red-900/60 text-red-100 text-sm hover:bg-red-900">Delete</button>
+    {{else}}
+    <span class="text-sm text-zinc-500">Read-only mode · writes disabled</span>
+    {{end}}
     <span id="status" class="text-sm text-zinc-400"></span>
   </div>
 </form>
@@ -134,8 +140,14 @@
       if (input) input.addEventListener('input', () => updateFKLink(c));
     });
 
+    const uiReadOnly = {{$.ReadOnly}};
+
+    // Always swallow form submission — even when uiReadOnly is true we
+    // do not want the browser's default GET reload to fire from Enter
+    // keystrokes inside an input. The PATCH path itself is gated below.
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (uiReadOnly) return;
       setStatus('Saving…', false);
       const body = {};
       columns.forEach((c) => {
@@ -155,15 +167,17 @@
       setStatus('PATCH ' + resp.status + ': ' + await readError(resp), true);
     });
 
-    document.getElementById('delete').addEventListener('click', async () => {
-      if (!confirm('Delete this row?')) return;
-      setStatus('Deleting…', false);
-      const url = new URL(apiOrigin + '/' + tableName);
-      url.searchParams.set(pkColumn, 'eq.' + pkValue);
-      const resp = await fetch(url, { method: 'DELETE' });
-      if (resp.ok) { window.location.href = '/t/' + tableName; return; }
-      setStatus('DELETE ' + resp.status + ': ' + await readError(resp), true);
-    });
+    if (!uiReadOnly) {
+      document.getElementById('delete').addEventListener('click', async () => {
+        if (!confirm('Delete this row?')) return;
+        setStatus('Deleting…', false);
+        const url = new URL(apiOrigin + '/' + tableName);
+        url.searchParams.set(pkColumn, 'eq.' + pkValue);
+        const resp = await fetch(url, { method: 'DELETE' });
+        if (resp.ok) { window.location.href = '/t/' + tableName; return; }
+        setStatus('DELETE ' + resp.status + ': ' + await readError(resp), true);
+      });
+    }
 
     loadRow();
   })();
