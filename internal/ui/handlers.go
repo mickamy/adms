@@ -84,6 +84,47 @@ func referencedByList(t *schema.Table) []fkRef {
 	return out
 }
 
+// inputKind classifies a column for the form UI so the right HTML input
+// can be rendered and the JS value parser can dispatch on it. Returns
+// one of "boolean", "integer", "number", "date", "json", "text". MySQL
+// boolean is recognized only as the conventional tinyint(1). Postgres
+// array types ("text[]", "integer[]", ...) map to "json" so users can
+// enter JSON array literals that PostgREST will convert. Timestamp and
+// datetime types fall through to "text" because HTML datetime-local
+// loses the timezone information Postgres timestamptz carries.
+func inputKind(c schema.Column) string {
+	raw := strings.ToLower(c.Type)
+	if strings.HasPrefix(raw, "tinyint(1)") {
+		return "boolean"
+	}
+
+	if strings.HasSuffix(raw, "[]") {
+		return "json"
+	}
+
+	bare := raw
+	if i := strings.Index(bare, "("); i >= 0 {
+		bare = strings.TrimSpace(bare[:i])
+	}
+
+	switch bare {
+	case "boolean", "bool":
+		return "boolean"
+	case "smallint", "integer", "int", "bigint",
+		"tinyint", "mediumint",
+		"smallserial", "serial", "bigserial":
+		return "integer"
+	case "numeric", "decimal", "real", "double precision", "double", "float":
+		return "number"
+	case "date":
+		return "date"
+	case "json", "jsonb":
+		return "json"
+	}
+
+	return "text"
+}
+
 // SinglePKColumn returns the lone PK column or "" if the table has a
 // composite PK or no PK at all. The row-detail UI hides write actions in
 // that case because PostgREST-style URLs cannot encode multi-column

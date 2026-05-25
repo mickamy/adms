@@ -46,7 +46,13 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 		return nil, errors.New("ui: apiOrigin is required")
 	}
 
-	tmpl, err := template.ParseFS(templatesFS, "templates/*.html")
+	// Funcs must be registered before ParseFS so every template parsed
+	// below can call them (e.g., `{{inputKind .}}`). A bare
+	// template.ParseFS would fail to compile templates that reference
+	// these funcs, so all UI templates must come through this constructor.
+	tmpl, err := template.New("ui").Funcs(template.FuncMap{
+		"inputKind": inputKind,
+	}).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("ui: parse templates: %w", err)
 	}

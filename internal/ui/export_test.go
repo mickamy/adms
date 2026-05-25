@@ -22,4 +22,8 @@ func ReferencedByList(t *schema.Table) []FKRef {
 	return referencedByList(t)
 }
 
+func InputKind(c schema.Column) string {
+	return inputKind(c)
+}
+
 type FKRef = fkRef

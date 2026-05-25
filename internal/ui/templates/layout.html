@@ -33,6 +33,42 @@
         return origFetch(input, opts);
       };
     })();
+
+    function admsParseValue(input) {
+      const kind = input.dataset.kind || 'text';
+      const v = input.value;
+      if (kind === 'boolean') {
+        if (v === '') return undefined;
+        if (v === 'true') return true;
+        if (v === 'false') return false;
+        return v;
+      }
+      if (v === '') return undefined;
+      if (kind === 'integer' || kind === 'number') {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : v;
+      }
+      if (kind === 'date') return v;
+      if (kind === 'json') {
+        try { return JSON.parse(v); } catch (_) { return v; }
+      }
+      if (v === 'null') return null;
+      return v;
+    }
+
+    function admsSetInputValue(input, v) {
+      const kind = input.dataset.kind || 'text';
+      if (v === null || v === undefined) { input.value = ''; return; }
+      if (kind === 'boolean') {
+        input.value = v === true ? 'true' : v === false ? 'false' : '';
+        return;
+      }
+      if (kind === 'json') {
+        input.value = typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v);
+        return;
+      }
+      input.value = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    }
   </script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex">
