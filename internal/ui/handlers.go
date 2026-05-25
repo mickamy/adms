@@ -141,7 +141,7 @@ func filterHint(c schema.Column) string {
 	case "date":
 		return "eq.2026-01-01, gte.2026-01-01"
 	case "json":
-		return "eq.<exact json>, is.null"
+		return `cs.["a"], cd.[...], is.null`
 	}
 
 	return "eq.foo, like.*foo*, ilike.*foo*"

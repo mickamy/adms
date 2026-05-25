@@ -24,6 +24,8 @@ func TestOperatorString(t *testing.T) {
 		{query.OpILike, "ilike"},
 		{query.OpIn, "in"},
 		{query.OpIs, "is"},
+		{query.OpCs, "cs"},
+		{query.OpCd, "cd"},
 	}
 
 	for _, tt := range tests {
@@ -60,6 +62,9 @@ func TestParseOperatorRoundTrip(t *testing.T) {
 		{"ilike", query.OpILike, "ilike.%foo%", "%foo%"},
 		{"in", query.OpIn, "in.(1,2,3)", "1,2,3"},
 		{"is", query.OpIs, "is.null", "null"},
+		{"cs jsonb array", query.OpCs, `cs.["welcome"]`, `["welcome"]`},
+		{"cs pg array literal", query.OpCs, "cs.{a,b}", "{a,b}"},
+		{"cd jsonb", query.OpCd, `cd.{"a":1}`, `{"a":1}`},
 	}
 
 	for _, tt := range cases {

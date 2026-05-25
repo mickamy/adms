@@ -16,6 +16,12 @@ const (
 	OpILike
 	OpIn
 	OpIs
+	// OpCs / OpCd are JSON / array containment, matching PostgREST.
+	// Backed by Postgres `@>` / `<@` for jsonb and array columns, and
+	// MySQL JSON_CONTAINS for json columns. Other column types are
+	// rejected at SQL build time.
+	OpCs
+	OpCd
 )
 
 var operatorNames = map[Operator]string{
@@ -29,6 +35,8 @@ var operatorNames = map[Operator]string{
 	OpILike: "ilike",
 	OpIn:    "in",
 	OpIs:    "is",
+	OpCs:    "cs",
+	OpCd:    "cd",
 }
 
 var operatorByName = func() map[string]Operator {

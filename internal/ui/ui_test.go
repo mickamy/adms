@@ -481,8 +481,8 @@ func TestFilterHint(t *testing.T) {
 		{"numeric", "gt.0"},
 		{"double precision", "lt.100"},
 		{"date", "gte.2026"},
-		{"jsonb", "<exact json>"},
-		{"text[]", "<exact json>"},
+		{"jsonb", "cs."},
+		{"text[]", "cs."},
 		{"text", "like.*foo*"},
 		{"timestamp with time zone", "like.*foo*"},
 	}
@@ -511,8 +511,8 @@ func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
 		// integer column "id" → integer hint
 		`name="id" placeholder="eq.10, gt.0, lt.100, in.(1,2,3)"`,
 		// json column "meta" / array column "tags" → json hint
-		`name="meta" placeholder="eq.&lt;exact json&gt;, is.null"`,
-		`name="tags" placeholder="eq.&lt;exact json&gt;, is.null"`,
+		`name="meta" placeholder="cs.[&#34;a&#34;], cd.[...], is.null"`,
+		`name="tags" placeholder="cs.[&#34;a&#34;], cd.[...], is.null"`,
 		// date column "born" → date hint
 		`name="born" placeholder="eq.2026-01-01, gte.2026-01-01"`,
 		// number column "score" → number hint

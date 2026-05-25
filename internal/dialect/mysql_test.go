@@ -125,3 +125,62 @@ func TestMySQLStringLiteral(t *testing.T) {
 		})
 	}
 }
+
+func TestMySQLContainmentExpr(t *testing.T) {
+	t.Parallel()
+
+	d := dialect.MySQL()
+
+	tests := []struct {
+		name       string
+		col        string
+		val        string
+		columnType string
+		contained  bool
+		wantSQL    string
+		wantErr    bool
+	}{
+		{
+			name: "json cs", col: "`tags`", val: "?",
+			columnType: "json", wantSQL: "JSON_CONTAINS(`tags`, ?)",
+		},
+		{
+			name: "json cd swaps arguments", col: "`tags`", val: "?",
+			columnType: "json", contained: true,
+			wantSQL: "JSON_CONTAINS(?, `tags`)",
+		},
+		{
+			name: "case insensitive type", col: "`tags`", val: "?",
+			columnType: "JSON", wantSQL: "JSON_CONTAINS(`tags`, ?)",
+		},
+		{
+			name: "non-json column errors", col: "`name`", val: "?",
+			columnType: "varchar(255)", wantErr: true,
+		},
+		{
+			name: "arrays unsupported on mysql", col: "`tags`", val: "?",
+			columnType: "text[]", wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := d.ContainmentExpr(tt.col, tt.val, tt.columnType, tt.contained)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("ContainmentExpr(%q) = %q, want error", tt.columnType, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("ContainmentExpr(%q) returned unexpected error: %v", tt.columnType, err)
+				return
+			}
+			if got != tt.wantSQL {
+				t.Errorf("ContainmentExpr(%q) = %q, want %q", tt.columnType, got, tt.wantSQL)
+			}
+		})
+	}
+}
