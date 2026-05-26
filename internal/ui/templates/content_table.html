@@ -47,7 +47,7 @@
         {{if and $.RowPKColumn (not $.ReadOnly)}}<th class="px-3 py-2 text-right font-medium">actions</th>{{end}}
       </tr>
     </thead>
-    <tbody id="rows" aria-live="polite" aria-busy="false" class="divide-y divide-zinc-800">
+    <tbody id="rows" aria-live="polite" aria-busy="true" class="divide-y divide-zinc-800">
       <tr><td colspan="{{len .Columns}}" class="px-3 py-6 text-zinc-500 text-center">Loading…</td></tr>
     </tbody>
   </table>
@@ -132,6 +132,16 @@
     const tbody = document.getElementById('rows');
     const rangeEl = document.getElementById('content-range');
     const colSpan = columns.length + (pkColumn && !uiReadOnly ? 1 : 0);
+    // Look pagination controls up by querySelector rather than
+    // form.elements.<name>: a column happening to be called "limit" /
+    // "offset" / "order" would otherwise turn the property into an
+    // HTMLFormControlsCollection (and `.value` into undefined) because
+    // the column-filter input shares the same name. The pagination
+    // inputs are first in DOM order, so the first match is the right
+    // one.
+    const orderInput = form.querySelector('input[name="order"]');
+    const limitInput = form.querySelector('input[name="limit"]');
+    const offsetInput = form.querySelector('input[name="offset"]');
     let currentRows = [];
 
     function escapeHTML(s) {
@@ -170,9 +180,31 @@
       } catch (_) { return text || String(resp.status); }
     }
 
+    function skeletonRows(count) {
+      // Five gray bars per row by default — the row count gives a hint
+      // of "data is coming" without claiming the actual page size.
+      // motion-safe gates the pulse on prefers-reduced-motion=no-preference
+      // so reduced-motion users see a static placeholder instead of a
+      // shimmering one.
+      const cellBar = `<span class="block h-3 w-full bg-zinc-800 rounded motion-safe:animate-pulse"></span>`;
+      const cellHTML = columns.map(() => `<td class="px-3 py-2">${cellBar}</td>`).join('');
+      let actionsHTML = '';
+      if (pkColumn && !uiReadOnly) {
+        actionsHTML = `<td class="px-3 py-2 text-right"><span class="inline-block h-3 w-16 bg-zinc-800 rounded motion-safe:animate-pulse"></span></td>`;
+      }
+      const row = `<tr aria-hidden="true">${cellHTML}${actionsHTML}</tr>`;
+      return row.repeat(count);
+    }
+
     async function load() {
       tbody.setAttribute('aria-busy', 'true');
-      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-zinc-500 text-center">Loading…</td></tr>`;
+      // Track the user's chosen page size (clamped to a reasonable
+      // ceiling) so the skeleton mirrors the row count that is about to
+      // land — no upward layout shift when the data arrives and only
+      // mild downward shift when the result is smaller than the limit.
+      const limitRaw = parseInt(limitInput.value, 10);
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 5;
+      tbody.innerHTML = skeletonRows(Math.min(limit, 10));
       try {
         const resp = await fetch(buildURL(), { headers: { Prefer: 'count=exact' } });
         rangeEl.textContent = resp.headers.get('Content-Range') || '—';
@@ -245,22 +277,17 @@
     form.addEventListener('submit', (e) => { e.preventDefault(); load(); });
 
     document.getElementById('next').addEventListener('click', () => {
-      const offset = form.elements.offset;
-      const limit = form.elements.limit;
-      offset.value = Number(offset.value || 0) + Number(limit.value || 20);
+      offsetInput.value = Number(offsetInput.value || 0) + Number(limitInput.value || 20);
       load();
     });
 
     document.getElementById('prev').addEventListener('click', () => {
-      const offset = form.elements.offset;
-      const limit = form.elements.limit;
-      offset.value = Math.max(0, Number(offset.value || 0) - Number(limit.value || 20));
+      offsetInput.value = Math.max(0, Number(offsetInput.value || 0) - Number(limitInput.value || 20));
       load();
     });
 
     document.querySelectorAll('thead [data-col]').forEach((th) => {
       th.addEventListener('click', () => {
-        const orderInput = form.elements.order;
         const col = th.dataset.col;
         orderInput.value = orderInput.value === col + '.asc' ? col + '.desc' : col + '.asc';
         load();
