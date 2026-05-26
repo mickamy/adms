@@ -922,8 +922,9 @@ func TestBuildURLGuardsReservedKeysFromColumnFilters(t *testing.T) {
 
 	for _, want := range []string{
 		// Reserved-key guard exists in the runtime; html/template's JS
-		// escape uses double quotes when rendering the Go-side slice.
-		`const RESERVED_KEYS = new Set(["select", "order", "limit", "offset", "and", "or"]);`,
+		// context serializes the Go-side []string as a compact JSON
+		// array literal (no spaces after commas).
+		`const RESERVED_KEYS = new Set(["select","order","limit","offset","and","or"]);`,
 		`if (RESERVED_KEYS.has(k)) return;`,
 		// buildURL now sources pagination from the cached inputs.
 		`if (orderInput && orderInput.value) url.searchParams.set('order', orderInput.value);`,

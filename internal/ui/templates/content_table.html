@@ -161,9 +161,10 @@
     // happens to share one, the column filter input is suppressed in
     // the template and we additionally skip it here as a belt-and-
     // suspenders guard so it cannot clobber the pagination value. The
-    // list is rendered from the Go-side reservedFilterNamesList slice
-    // so there is no Go/JS drift.
-    const RESERVED_KEYS = new Set([{{range $i, $k := reservedFilterNames}}{{if $i}}, {{end}}{{$k}}{{end}}]);
+    // list is rendered from the Go side; html/template serializes a
+    // []string in JS context as a JSON array literal so the Set ctor
+    // accepts it directly.
+    const RESERVED_KEYS = new Set({{reservedFilterNames}});
 
     function buildURL() {
       const url = new URL(apiOrigin + '/' + tableName);
