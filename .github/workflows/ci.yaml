@@ -78,3 +78,22 @@ jobs:
 
       - name: Build binary
         run: make build
+
+  ui-css-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Regenerate the committed tailwind.css and fail the job if the
+      # working tree changes — i.e., a template touched a class that the
+      # committed bundle does not contain. The standalone CLI download is
+      # ~5 MB and rebuild is ~200 ms, so the cost per run is negligible.
+      - name: Regenerate tailwind.css
+        run: make ui-css
+
+      - name: Fail if tailwind.css is out of date
+        run: |
+          if ! git diff --exit-code internal/ui/static/css/tailwind.css; then
+            echo "::error::internal/ui/static/css/tailwind.css is out of date — run 'make ui-css' and commit the result"
+            exit 1
+          fi

@@ -1,0 +1,4 @@
+# Tree-shaken minified bundle from `make ui-css`. Collapsing the diff on
+# GitHub keeps PRs that change templates focused on the source change,
+# not on the generated CSS reflow.
+internal/ui/static/css/tailwind.css linguist-generated=true
