@@ -142,8 +142,10 @@ func TestTableViewCarriesA11yAttributes(t *testing.T) {
 	body := readAll(t, resp)
 
 	for _, want := range []string{
-		// tbody announces row reloads to screen readers.
-		`<tbody id="rows" aria-live="polite" aria-busy="false"`,
+		// tbody announces row reloads to screen readers. Initial busy
+		// state is true so the static "Loading…" markup before the IIFE
+		// runs is correctly described while data is still pending.
+		`<tbody id="rows" aria-live="polite" aria-busy="true"`,
 		// Modal title is referenced from the dialog for accessible name.
 		`<dialog id="edit-modal" aria-labelledby="edit-modal-title"`,
 		`<h2 id="edit-modal-title"`,
@@ -160,6 +162,54 @@ func TestTableViewCarriesA11yAttributes(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("table view a11y attribute missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
+func TestTableViewLoadsSkeletonRows(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// Helper function + the JS that puts the skeleton on screen.
+		`function skeletonRows(count)`,
+		// Row count is derived from the user's limit input, clamped to
+		// a sane ceiling so a `limit=1000` page does not paint a sea of
+		// placeholders.
+		`form.elements.limit.value`,
+		`tbody.innerHTML = skeletonRows(Math.min(limit, 10));`,
+		// motion-safe gates the shimmer on prefers-reduced-motion=no-preference,
+		// so the bundled CSS must include the qualifier output.
+		`motion-safe:animate-pulse`,
+		// aria-hidden on each row keeps screen readers from announcing
+		// the placeholder while aria-busy is true.
+		`aria-hidden="true"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("table view skeleton wiring missing %q\n---body---\n%s", want, body)
+		}
+	}
+
+	cssResp := httpGet(t, ts.URL+"/static/css/tailwind.css")
+	defer func() { _ = cssResp.Body.Close() }()
+
+	cssBody := readAll(t, cssResp)
+	for _, want := range []string{
+		// The reduced-motion media query and the pulse keyframe both
+		// land in the bundled CSS, so the shimmer only animates for
+		// users who have not opted out.
+		`@media (prefers-reduced-motion:no-preference)`,
+		`@keyframes pulse`,
+		`.motion-safe\:animate-pulse`,
+	} {
+		if !strings.Contains(cssBody, want) {
+			t.Errorf("tailwind bundle missing %q for reduced-motion-safe skeleton", want)
 		}
 	}
 }
