@@ -794,6 +794,38 @@ func TestInputKind(t *testing.T) {
 	}
 }
 
+func TestIsReservedFilterName(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		want bool
+	}{
+		// Pagination / projection keys the adms query parser owns.
+		{"select", true},
+		{"order", true},
+		{"limit", true},
+		{"offset", true},
+		// Group operators.
+		{"and", true},
+		{"or", true},
+		// Ordinary column names must not be flagged.
+		{"id", false},
+		{"name", false},
+		// Match is case-sensitive to mirror the server parser, which
+		// switches on the exact lowercased PostgREST keys.
+		{"Limit", false},
+		{"OFFSET", false},
+		{"", false},
+	}
+
+	for _, tc := range cases {
+		if got := ui.IsReservedFilterName(tc.name); got != tc.want {
+			t.Errorf("IsReservedFilterName(%q) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestFilterHint(t *testing.T) {
 	t.Parallel()
 
@@ -818,6 +850,91 @@ func TestFilterHint(t *testing.T) {
 		got := ui.FilterHint(schema.Column{Type: tc.typ})
 		if !strings.Contains(got, tc.contains) {
 			t.Errorf("filterHint(%q) = %q, want substring %q", tc.typ, got, tc.contains)
+		}
+	}
+}
+
+func TestTableViewSuppressesFilterForReservedColumnNames(t *testing.T) {
+	t.Parallel()
+
+	sch := schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema: "public",
+				Name:   "quotas",
+				Columns: []schema.Column{
+					{Name: "id", Type: "bigint"},
+					// Column names that collide with PostgREST-style query
+					// keys the adms parser reserves for pagination /
+					// grouping. The UI cannot offer a filter input for
+					// them since the API would refuse / clobber the
+					// pagination value.
+					{Name: "limit", Type: "integer"},
+					{Name: "offset", Type: "integer"},
+					{Name: "order", Type: "text"},
+				},
+				PrimaryKey: []string{"id"},
+			},
+		},
+	}
+
+	ts := newTestUIServer(t, sch)
+
+	resp := httpGet(t, ts.URL+"/t/quotas")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	// `id` still gets a filter input.
+	if !strings.Contains(body, `name="id" data-filter-kind="integer"`) {
+		t.Errorf("ordinary column should still render a filter input\n---body---\n%s", body)
+	}
+
+	// Reserved-name columns must NOT carry a column-filter input — the
+	// only inputs named limit / offset / order in the document should
+	// be the pagination controls (no data-filter-kind).
+	for _, forbidden := range []string{
+		`name="limit" data-filter-kind=`,
+		`name="offset" data-filter-kind=`,
+		`name="order" data-filter-kind=`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("reserved-name column rendered a filter input: %q\n---body---\n%s", forbidden, body)
+		}
+	}
+
+	// And the label area carries the explanatory note for each.
+	hits := strings.Count(body, "column name is reserved")
+	if hits != 3 {
+		t.Errorf("expected 3 reserved-name notes (limit / offset / order); got %d", hits)
+	}
+}
+
+func TestBuildURLGuardsReservedKeysFromColumnFilters(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// Reserved-key guard exists in the runtime; html/template's JS
+		// escape uses double quotes when rendering the Go-side slice.
+		`const RESERVED_KEYS = new Set(["select", "order", "limit", "offset", "and", "or"]);`,
+		`if (RESERVED_KEYS.has(k)) return;`,
+		// buildURL now sources pagination from the cached inputs.
+		`if (orderInput && orderInput.value) url.searchParams.set('order', orderInput.value);`,
+		`if (limitInput && limitInput.value) url.searchParams.set('limit', limitInput.value);`,
+		`if (offsetInput && offsetInput.value) url.searchParams.set('offset', offsetInput.value);`,
+		// Column filters come from data-filter-kind inputs only, skipping
+		// FormData iteration over the pagination inputs.
+		`form.querySelectorAll('input[data-filter-kind]')`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("buildURL guard wiring missing %q\n---body---\n%s", want, body)
 		}
 	}
 }

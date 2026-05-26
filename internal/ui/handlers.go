@@ -3,6 +3,7 @@ package ui
 import (
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/mickamy/adms/internal/logger"
@@ -145,6 +146,25 @@ func filterHint(c schema.Column) string {
 	}
 
 	return "foo, like.*foo*, ilike.*foo*"
+}
+
+// reservedFilterNamesList is the canonical set of query-string keys the
+// adms parser owns for pagination / projection / grouping (see
+// internal/query/parser.go). Exposed as a template function so the
+// table-view JS RESERVED_KEYS Set is rendered from the same list,
+// avoiding a Go / JS drift. Callers must treat the returned slice as
+// immutable.
+var reservedFilterNamesList = []string{"select", "order", "limit", "offset", "and", "or"}
+
+func reservedFilterNames() []string { return reservedFilterNamesList }
+
+// isReservedFilterName reports whether a column name collides with an
+// adms query-string key. A table whose column is named one of these
+// cannot be filtered through the API, so the table-view template skips
+// the filter input for it and the JS buildURL guard skips the matching
+// URL parameter.
+func isReservedFilterName(name string) bool {
+	return slices.Contains(reservedFilterNamesList, name)
 }
 
 // SinglePKColumn returns the lone PK column or "" if the table has a

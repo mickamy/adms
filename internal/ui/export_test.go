@@ -30,4 +30,8 @@ func FilterHint(c schema.Column) string {
 	return filterHint(c)
 }
 
+func IsReservedFilterName(name string) bool {
+	return isReservedFilterName(name)
+}
+
 type FKRef = fkRef
