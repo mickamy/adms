@@ -1,9 +1,17 @@
 # UI static assets
 
-Phase 7a serves Tailwind and HTMX from CDNs (`cdn.tailwindcss.com`,
-`unpkg.com/htmx.org`) embedded in `templates/layout.html`. Phase 7c
-will replace these with vendored, minified bundles served from this
-directory via `embed.FS` + `http.FileServer`.
+`css/tailwind.css` is the minified Tailwind build referenced by
+`templates/layout.html`. It is generated from `css/input.css` and the
+templates by the standalone tailwindcss CLI (pinned in the Makefile),
+tree-shaken to the classes actually used in `templates/**/*.html`.
 
-This file exists so the embed pattern in `ui.go` has at least one
-matched entry; remove or replace once real assets land.
+To regenerate after editing any template:
+
+```sh
+make ui-css
+```
+
+The Makefile downloads the right tailwindcss binary into `bin/` on first
+use (gitignored) and reuses it thereafter. The generated `tailwind.css`
+is checked in so production builds, CI, and offline / closed-network
+deployments do not need the CLI or any network access.

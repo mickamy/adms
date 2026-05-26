@@ -83,10 +83,44 @@ func TestIndexRendersSidebar(t *testing.T) {
 		`<meta name="adms-api-origin" content="http://localhost:7777">`,
 		`href="/t/users"`,
 		`href="/t/posts"`,
+		// Tailwind is served locally now, not from the Play CDN.
+		`<link rel="stylesheet" href="/static/css/tailwind.css">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q\n---body---\n%s", want, body)
 		}
+	}
+
+	// Hard guard against the CDN script crawling back in.
+	if strings.Contains(body, "cdn.tailwindcss.com") {
+		t.Errorf("layout still references the Tailwind Play CDN; UI must be served from embed.FS")
+	}
+}
+
+func TestStaticTailwindCSSIsServed(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/static/css/tailwind.css")
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/css") {
+		t.Errorf("Content-Type = %q, want text/css; …", ct)
+	}
+
+	body := readAll(t, resp)
+	// Sanity check the file actually contains generated Tailwind utility
+	// rules. `.flex` is referenced from every form-bearing template and
+	// is therefore guaranteed to survive tree-shaking — using it instead
+	// of an incidental comment substring keeps the check stable across
+	// CLI versions that might strip or rewrite the MIT banner.
+	if !strings.Contains(body, ".flex") || len(body) < 5*1024 {
+		t.Errorf("tailwind.css looks empty / stubbed: %d bytes", len(body))
 	}
 }
 
