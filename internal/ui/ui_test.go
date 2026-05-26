@@ -181,8 +181,12 @@ func TestTableViewLoadsSkeletonRows(t *testing.T) {
 		`function skeletonRows(count)`,
 		// Row count is derived from the user's limit input, clamped to
 		// a sane ceiling so a `limit=1000` page does not paint a sea of
-		// placeholders.
-		`form.elements.limit.value`,
+		// placeholders. The querySelector form is required because a
+		// column named "limit" would otherwise collide with the
+		// pagination input and turn form.elements.limit into an
+		// HTMLFormControlsCollection.
+		`const limitInput = form.querySelector('input[name="limit"]');`,
+		`parseInt(limitInput.value, 10)`,
 		`tbody.innerHTML = skeletonRows(Math.min(limit, 10));`,
 		// motion-safe gates the shimmer on prefers-reduced-motion=no-preference,
 		// so the bundled CSS must include the qualifier output.
