@@ -10,8 +10,8 @@ PostgREST-style HTTP API for PostgreSQL and MySQL, plus an optional bundled admi
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/mickamy?label=sponsor&logo=github)](https://github.com/sponsors/mickamy)
 
-> Status: early development. See the [Roadmap](#roadmap) for what works today. This README is the spec we are building
-> toward.
+> Status: the read / write API and the bundled admin UI both ship — see the [Roadmap](#roadmap). Remaining items are
+> UI polish (CSV / JSON export, keyboard shortcuts, ER diagram, full a11y pass).
 
 ## TL;DR
 
@@ -407,30 +407,36 @@ served on a **separate listener** (`ui.listen`, default `:7778`) by the same pro
 untouched, with table names occupying the full URL root. The UI calls the same HTTP API documented above, with CORS
 auto-configured between the two listeners — it is not a parallel implementation, it is the first-class client of it.
 
-The UI is a single-binary affair: HTML, CSS, and JavaScript are embedded into the `adms` executable via `embed.FS`. No
-`node_modules`, no separate frontend deploy. It is rendered server-side with Go's `html/template`, made interactive
-with [HTMX](https://htmx.org/), and styled with Tailwind CSS.
+The UI is a single-binary affair: HTML, CSS, and JavaScript are embedded into the `adms` executable via `embed.FS` —
+including the tree-shaken minified Tailwind CSS bundle, so deployments in closed networks need no external CDN access.
+No `node_modules`, no separate frontend deploy. It is rendered server-side with Go's `html/template` and made
+interactive with vanilla `fetch` against the same HTTP API documented above.
 
 ### What you get
 
-- **Sidebar** — schema-grouped table list with incremental search
-- **Table view** — row list with column resize, PostgREST-style filter builder, column-header sort, paging; the URL
-  stays in sync so links are shareable
-- **Row detail** — foreign keys are clickable: one-to-many appears as a collapsible nested table, many-to-one as a link
-  to the parent row
-- **Edit** — inline cell editing or modal edit, both wired to `PATCH /:table`
-- **Insert** — typed input forms with FK pickers, a JSON editor for `json` columns, and dropdowns for enums
-- **Delete** — confirm dialog → `DELETE /:table`
-- **Schema viewer** — tables / columns / PKs / FKs / indexes, with a small ER diagram
-- **Export** — stream the current filtered result as CSV or JSON
+- **Sidebar** — schema-grouped table list with incremental search.
+- **Table view** — row list with PostgREST-style filter inputs (kind-aware placeholders, bare values auto-prefixed with
+  the kind-default operator), column-header sort, paging, FK arrows that jump to the referenced row.
+- **Row detail** — type-aware inputs by column kind (`<select>` for booleans, `type="number"` / `type="date"`,
+  `<textarea>` for JSON), outgoing FK link that live-updates as you edit, and a "Referenced by" section listing
+  incoming relationships as filtered table views.
+- **Edit** — double-click any cell for in-place editing, or open the row in a modal via the row's "edit" button. Both
+  paths submit `PATCH /:table?<pk>=eq.<id>` and refresh the visible rows on success.
+- **Insert** — kind-aware form on `/t/{table}/new`. Empty inputs are omitted from the POST so column defaults / NULL
+  apply.
+- **Delete** — confirm dialog → `DELETE /:table?<pk>=eq.<id>`.
+- **Schema viewer** — at `/t/{table}/schema`: columns (name / type / nullable / default / generated-or-identity /
+  comment), primary key, outgoing FKs, incoming FKs (Referenced by), and indexes (name, columns, UNIQUE, method,
+  partial-index predicate). FK / Referenced-by entries link to the other table's schema page.
 
 ### Design
 
-- **Dark mode** by default, with a light toggle that follows `prefers-color-scheme` and persists per browser
-- **Responsive** down to tablet widths (>= 768px)
-- **Accessible** — focus rings, ARIA labels, semantic HTML, full keyboard navigation
-- **Keyboard shortcuts** — `Cmd/Ctrl+K` for the table palette, `↑↓` to walk rows, `Enter` to open, `Esc` to dismiss
-- **Loading / empty / error states** drawn explicitly on every screen — optional does not mean half-finished
+- **Dark mode** by default.
+- **Responsive** down to tablet widths (>= 768px).
+- **Read-only gating** — when `read_only: true` the UI hides every write affordance (`+ New`, edit / delete buttons,
+  inline-edit, modal, Save / Delete on row detail) and `/t/{table}/new` returns 404.
+- **Type-aware forms** — boolean / integer / number / date / JSON / text inputs and the JS value parser dispatch on the
+  same Go-side `inputKind` classifier so client and server agree on the column shape.
 
 ### Access
 
@@ -471,16 +477,17 @@ allowed_tables: [users, posts, comments]
 
 Anything outside the allowlist is invisible — at `GET /`, at the per-table endpoints, and in the UI sidebar.
 
-### Bearer token (planned, Phase 6)
+### Bearer token
 
 ```yaml
 auth_token_env: ADMS_TOKEN
 ```
 
 When set, `adms` reads the bearer token from the named environment variable and requires every request to include
-`Authorization: Bearer <token>`. The admin UI carries the token automatically. This is intentionally simple — for OIDC
-/ JWT, terminate auth at your gateway. The token value itself never appears in the config file, so it does not leak
-into version control.
+`Authorization: Bearer <token>`. The admin UI carries the token automatically (the resolved value is exposed via a
+meta tag that an inline fetch wrapper picks up and attaches to every API-origin request). This is intentionally
+simple — for OIDC / JWT, terminate auth at your gateway. The token value itself never appears in the config file, so
+it does not leak into version control.
 
 ### CORS
 
@@ -562,16 +569,21 @@ Working examples live in [`examples/adms.yaml`](examples/adms.yaml) and [`exampl
 ## Roadmap
 
 - [x] Phase 0 — CLI scaffolding, goreleaser metadata
-- [x] Phase 1 — Schema introspection (PostgreSQL + MySQL)
+- [x] Phase 1 — Schema introspection (PostgreSQL + MySQL, including indexes with method and partial predicate)
 - [x] Phase 1.5 — Config-file driven CLI; subcommands and per-setting flags removed
-- [ ] Phase 2 — HTTP server, `GET /` schema endpoint, `GET /healthz`, graceful shutdown
-- [ ] Phase 3 — Read API: filter, projection, ordering, paging
-- [ ] Phase 4 — Read API: relation embedding (FK-aware JSON aggregation)
-- [ ] Phase 5 — Write API: `POST` / `PATCH` / `DELETE`, `Prefer` header, `Content-Range`
-- [ ] Phase 6 — CORS, logging, panic recovery, `read_only`, allowlists, bearer token, README polish
-- [ ] Phase 7 — Bundled admin UI (opt-in via `ui.enabled`): served on a separate listener (`ui.listen`, default
-  `:7778`), HTML/CSS/JS embedded, SSR with HTMX + Tailwind, CORS auto-configured, dark mode, keyboard shortcuts,
-  accessibility
+- [x] Phase 2 — HTTP server, `GET /` schema endpoint, `GET /healthz`, graceful shutdown
+- [x] Phase 3 — Read API: filter (incl. `cs` / `cd` JSON / array containment), projection, ordering, paging
+- [x] Phase 4 — Read API: relation embedding (FK-aware JSON aggregation)
+- [x] Phase 5 — Write API: `POST` / `PATCH` / `DELETE`, `Prefer` header, `Content-Range`
+- [x] Phase 6 — CORS, structured logging, panic recovery, `read_only`, allowlists, bearer token
+- [x] Phase 7 — Bundled admin UI (opt-in via `ui.enabled`): separate listener (`ui.listen`, default `:7778`),
+  HTML/CSS/JS embedded via `embed.FS`, SSR with `html/template` + minified Tailwind, CORS auto-configured, dark mode,
+  type-aware form inputs, inline cell + modal edit, FK navigation, schema viewer, bearer-token forwarding, read-only
+  gating
+- [ ] CSV / JSON export of filtered query results
+- [ ] Keyboard shortcuts (`Cmd/Ctrl+K` table palette, `↑↓` row navigation)
+- [ ] a11y polish (skeleton loaders, explicit empty / error states, light-mode toggle)
+- [ ] Schema viewer ER diagram
 
 ## Why not PostgREST?
 
@@ -589,8 +601,9 @@ Reach for `adms` when:
 ## Acknowledgements
 
 The URL conventions, the embedding syntax, and the `Prefer`-header semantics in this project are taken almost verbatim
-from [PostgREST](https://postgrest.org/). The admin UI is rendered with [HTMX](https://htmx.org/) and styled
-with [Tailwind CSS](https://tailwindcss.com/). Standing on giants' shoulders — thank you.
+from [PostgREST](https://postgrest.org/). The admin UI is styled with [Tailwind CSS](https://tailwindcss.com/),
+generated by the standalone tailwindcss CLI and bundled into the binary at build time. Standing on giants'
+shoulders — thank you.
 
 ## Sponsor
 
