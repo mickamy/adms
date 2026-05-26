@@ -147,6 +147,30 @@ func filterHint(c schema.Column) string {
 	return "foo, like.*foo*, ilike.*foo*"
 }
 
+// reservedFilterNames lists the query-string keys the adms parser owns
+// for pagination / projection / grouping (see internal/query/parser.go).
+// Exposed as a template function so the table-view JS RESERVED_KEYS Set
+// can be rendered from the Go side and stay in sync. A fresh slice is
+// returned per call so callers cannot accidentally mutate a shared
+// package-level value.
+func reservedFilterNames() []string {
+	return []string{"select", "order", "limit", "offset", "and", "or"}
+}
+
+// isReservedFilterName reports whether a column name collides with one
+// of those keys. A table whose column matches cannot be filtered
+// through the API, so the table-view template skips the filter input
+// for it and the JS buildURL guard skips the matching URL parameter.
+// The switch mirrors reservedFilterNames; both must stay aligned.
+func isReservedFilterName(name string) bool {
+	switch name {
+	case "select", "order", "limit", "offset", "and", "or":
+		return true
+	default:
+		return false
+	}
+}
+
 // SinglePKColumn returns the lone PK column or "" if the table has a
 // composite PK or no PK at all. The row-detail UI hides write actions in
 // that case because PostgREST-style URLs cannot encode multi-column
