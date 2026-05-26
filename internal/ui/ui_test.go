@@ -97,6 +97,88 @@ func TestIndexRendersSidebar(t *testing.T) {
 	}
 }
 
+func TestLayoutCarriesA11yLandmarks(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	// `users` is the active table so the sidebar entry should advertise it.
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// Skip-to-content link for keyboard users.
+		`href="#main-content"`,
+		`Skip to content`,
+		// <main> carries the matching id and is focusable from the skip link.
+		`<main id="main-content" tabindex="-1"`,
+		// Sidebar search has a real <label> rather than relying on placeholder.
+		`<label for="table-filter" class="sr-only">Filter tables</label>`,
+		`id="table-filter"`,
+		// The nav landmark carries the accessible name; aside stays
+		// unlabelled to avoid the duplicate "Tables, complementary,
+		// Tables, navigation" announcement that screen readers would
+		// otherwise produce.
+		`<nav aria-label="Tables">`,
+		// Active table entry must announce itself as the current page.
+		`aria-current="page"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("layout a11y landmark missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
+func TestTableViewCarriesA11yAttributes(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// tbody announces row reloads to screen readers.
+		`<tbody id="rows" aria-live="polite" aria-busy="false"`,
+		// Modal title is referenced from the dialog for accessible name.
+		`<dialog id="edit-modal" aria-labelledby="edit-modal-title"`,
+		`<h2 id="edit-modal-title"`,
+		// Modal status span uses role=status / aria-live.
+		`id="edit-status" role="status" aria-live="polite"`,
+		// FK arrow link in renderRows builds an aria-label so the bare "→"
+		// has a screen-reader-accessible name.
+		`aria-label="${label}"`,
+		`const label = ` + "`" + `Open ${escapeHTML(ref.table)} row ${escapeHTML(String(v))}` + "`" + `;`,
+		// Load / error states announce themselves on the tbody.
+		`tbody.setAttribute('aria-busy', 'true')`,
+		`tbody.setAttribute('aria-busy', 'false')`,
+		`role="alert"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("table view a11y attribute missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
+func TestRowViewStatusSpanIsAnnounced(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users/r/1")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	if !strings.Contains(body, `id="status" role="status" aria-live="polite"`) {
+		t.Errorf("row view status span must carry role/aria-live\n---body---\n%s", body)
+	}
+}
+
 func TestStaticTailwindCSSIsServed(t *testing.T) {
 	t.Parallel()
 

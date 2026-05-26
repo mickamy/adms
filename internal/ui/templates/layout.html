@@ -72,17 +72,21 @@
   </script>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen flex">
+  <a href="#main-content"
+    class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:px-3 focus:py-1 focus:rounded focus:bg-zinc-100 focus:text-zinc-900 focus:text-sm">Skip to content</a>
   <aside class="w-64 shrink-0 border-r border-zinc-800 p-4 overflow-y-auto h-screen sticky top-0">
     <a href="/" class="block font-semibold text-zinc-100 mb-3">adms</a>
-    <input type="search" placeholder="Filter tables…"
+    <label for="table-filter" class="sr-only">Filter tables</label>
+    <input id="table-filter" type="search" placeholder="Filter tables…"
       class="w-full px-2 py-1 mb-3 rounded bg-zinc-900 border border-zinc-800 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-600"
       oninput="filterTables(this.value)">
-    <nav>
+    <nav aria-label="Tables">
       <ul class="space-y-1 text-sm">
         {{range .Tables}}
         <li>
           <a href="/t/{{.Name}}"
             data-table-name="{{.Name}}"
+            {{if eq $.ActiveTable .Name}}aria-current="page"{{end}}
             class="block px-2 py-1 rounded hover:bg-zinc-800 {{if eq $.ActiveTable .Name}}bg-zinc-800 text-zinc-50{{else}}text-zinc-300{{end}}">
             <div class="break-all">{{.Name}}</div>
             <div class="text-zinc-500 text-xs">{{.Schema}}</div>
@@ -94,7 +98,7 @@
       </ul>
     </nav>
   </aside>
-  <main class="flex-1 p-6 overflow-x-auto">
+  <main id="main-content" tabindex="-1" class="flex-1 p-6 overflow-x-auto">
     {{if eq .ContentTmpl "content_index.html"}}{{template "content_index.html" .}}{{end}}
     {{if eq .ContentTmpl "content_table.html"}}{{template "content_table.html" .}}{{end}}
     {{if eq .ContentTmpl "content_new.html"}}{{template "content_new.html" .}}{{end}}

@@ -47,7 +47,7 @@
         {{if and $.RowPKColumn (not $.ReadOnly)}}<th class="px-3 py-2 text-right font-medium">actions</th>{{end}}
       </tr>
     </thead>
-    <tbody id="rows" class="divide-y divide-zinc-800">
+    <tbody id="rows" aria-live="polite" aria-busy="false" class="divide-y divide-zinc-800">
       <tr><td colspan="{{len .Columns}}" class="px-3 py-6 text-zinc-500 text-center">Loading…</td></tr>
     </tbody>
   </table>
@@ -61,11 +61,11 @@
 </div>
 
 {{if and $.RowPKColumn (not $.ReadOnly)}}
-<dialog id="edit-modal" class="rounded-lg p-0 bg-transparent backdrop:bg-black/60">
+<dialog id="edit-modal" aria-labelledby="edit-modal-title" class="rounded-lg p-0 bg-transparent backdrop:bg-black/60">
   <form id="edit-form" class="space-y-3 bg-zinc-950 text-zinc-100 border border-zinc-800 rounded-lg p-6 w-[40rem] max-w-[90vw]">
     <header class="flex items-start justify-between gap-4 mb-2">
       <div>
-        <h2 class="text-lg font-semibold">Edit row</h2>
+        <h2 id="edit-modal-title" class="text-lg font-semibold">Edit row</h2>
         <p class="text-zinc-500 text-sm" id="edit-meta">—</p>
       </div>
       <a id="edit-fullpage-link" href="#" class="text-sm text-zinc-400 hover:text-zinc-200 whitespace-nowrap">Open full page →</a>
@@ -109,7 +109,7 @@
       <button type="submit" class="px-3 py-1.5 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">Save</button>
       <button type="button" id="edit-delete" class="px-3 py-1.5 rounded bg-red-900/60 text-red-100 text-sm hover:bg-red-900">Delete</button>
       <button type="button" id="edit-cancel" class="px-3 py-1.5 rounded bg-zinc-800 text-zinc-200 text-sm hover:bg-zinc-700">Cancel</button>
-      <span id="edit-status" class="text-sm text-zinc-400"></span>
+      <span id="edit-status" role="status" aria-live="polite" class="text-sm text-zinc-400"></span>
     </footer>
   </form>
 </dialog>
@@ -171,17 +171,20 @@
     }
 
     async function load() {
+      tbody.setAttribute('aria-busy', 'true');
       tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-zinc-500 text-center">Loading…</td></tr>`;
       try {
         const resp = await fetch(buildURL(), { headers: { Prefer: 'count=exact' } });
         rangeEl.textContent = resp.headers.get('Content-Range') || '—';
         if (!resp.ok) {
-          tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-red-400 text-center">${escapeHTML(await readError(resp))}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="${colSpan}" role="alert" class="px-3 py-6 text-red-400 text-center">${escapeHTML(await readError(resp))}</td></tr>`;
           return;
         }
         renderRows(await resp.json());
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-3 py-6 text-red-400 text-center">${escapeHTML(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" role="alert" class="px-3 py-6 text-red-400 text-center">${escapeHTML(err.message)}</td></tr>`;
+      } finally {
+        tbody.setAttribute('aria-busy', 'false');
       }
     }
 
@@ -203,7 +206,8 @@
             const ref = outgoingFKs[c];
             if (ref) {
               const target = '/t/' + encodeURIComponent(ref.table) + '/r/' + encodeURIComponent(String(v));
-              cell = `${text} <a href="${target}" class="text-zinc-500 hover:text-zinc-100 text-xs ml-1">→</a>`;
+              const label = `Open ${escapeHTML(ref.table)} row ${escapeHTML(String(v))}`;
+              cell = `${text} <a href="${target}" aria-label="${label}" class="text-zinc-500 hover:text-zinc-100 text-xs ml-1">→</a>`;
             } else {
               cell = text;
             }
