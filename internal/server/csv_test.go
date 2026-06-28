@@ -3,6 +3,8 @@ package server_test
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
@@ -10,6 +12,14 @@ import (
 
 	"github.com/mickamy/adms/internal/server"
 )
+
+// failingWriter is an http.ResponseWriter whose body writes always fail,
+// so writeCSV's flush surfaces the error.
+type failingWriter struct{}
+
+func (failingWriter) Header() http.Header       { return http.Header{} }
+func (failingWriter) WriteHeader(int)           {}
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("boom") }
 
 func TestWantsCSV(t *testing.T) {
 	t.Parallel()
@@ -110,5 +120,14 @@ func TestWriteCSV_EmptyRowsStillWritesHeader(t *testing.T) {
 
 	if got := strings.TrimRight(rec.Body.String(), "\n"); got != "id,name" {
 		t.Errorf("header = %q, want %q", got, "id,name")
+	}
+}
+
+func TestWriteCSV_PropagatesWriteError(t *testing.T) {
+	t.Parallel()
+
+	err := server.WriteCSV(failingWriter{}, []string{"id"}, []map[string]any{{"id": int64(1)}})
+	if err == nil {
+		t.Fatal("WriteCSV: want error from a failing writer, got nil")
 	}
 }

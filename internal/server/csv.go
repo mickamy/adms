@@ -29,29 +29,25 @@ func wantsCSV(accept string) bool {
 
 // writeCSV renders scanned rows as RFC 4180 CSV. The header row follows
 // the column projection order; embedded relations are emitted as their
-// JSON text and binary values as base64, matching the JSON response.
+// JSON text and binary values as base64, matching the JSON response. The
+// rows are already materialized in memory (bounded by the query limit),
+// so WriteAll keeps a single error path.
 func writeCSV(w http.ResponseWriter, cols []string, rows []map[string]any) error {
-	cw := csv.NewWriter(w)
+	records := make([][]string, 0, len(rows)+1)
+	records = append(records, cols)
 
-	if err := cw.Write(cols); err != nil {
-		return fmt.Errorf("write header: %w", err)
-	}
-
-	record := make([]string, len(cols))
 	for _, row := range rows {
+		record := make([]string, len(cols))
 		for i, col := range cols {
 			record[i] = csvCell(row[col])
 		}
 
-		if err := cw.Write(record); err != nil {
-			return fmt.Errorf("write row: %w", err)
-		}
+		records = append(records, record)
 	}
 
-	cw.Flush()
-
-	if err := cw.Error(); err != nil {
-		return fmt.Errorf("flush: %w", err)
+	cw := csv.NewWriter(w)
+	if err := cw.WriteAll(records); err != nil {
+		return fmt.Errorf("write csv: %w", err)
 	}
 
 	return nil
