@@ -930,9 +930,9 @@ func TestBuildURLGuardsReservedKeysFromColumnFilters(t *testing.T) {
 		`if (orderInput && orderInput.value) url.searchParams.set('order', orderInput.value);`,
 		`if (limitInput && limitInput.value) url.searchParams.set('limit', limitInput.value);`,
 		`if (offsetInput && offsetInput.value) url.searchParams.set('offset', offsetInput.value);`,
-		// Column filters come from data-filter-kind inputs only, skipping
+		// Column filters come from data-filter-kind controls only, skipping
 		// FormData iteration over the pagination inputs.
-		`form.querySelectorAll('input[data-filter-kind]')`,
+		`form.querySelectorAll('[data-filter-kind]')`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("buildURL guard wiring missing %q\n---body---\n%s", want, body)

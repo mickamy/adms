@@ -176,11 +176,12 @@
       if (limitInput && limitInput.value) url.searchParams.set('limit', limitInput.value);
       if (offsetInput && offsetInput.value) url.searchParams.set('offset', offsetInput.value);
 
-      // Column filters: every column-filter input carries data-filter-kind
+      // Column filters: every column-filter control carries data-filter-kind
       // (pagination inputs do not), so querySelectorAll never picks up
-      // the pagination controls. The RESERVED_KEYS guard remains as a
-      // defensive measure for a future template change.
-      form.querySelectorAll('input[data-filter-kind]').forEach((input) => {
+      // the pagination controls. The selector is tag-agnostic so a future
+      // <select>/<textarea> filter is still collected. The RESERVED_KEYS
+      // guard remains as a defensive measure for a future template change.
+      form.querySelectorAll('[data-filter-kind]').forEach((input) => {
         const k = input.name;
         if (RESERVED_KEYS.has(k)) return;
         if (input.value === '' || input.value == null) return;
