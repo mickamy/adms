@@ -51,9 +51,11 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 	// template.ParseFS would fail to compile templates that reference
 	// these funcs, so all UI templates must come through this constructor.
 	tmpl, err := template.New("ui").Funcs(template.FuncMap{
-		"inputKind":     inputKind,
-		"filterHint":    filterHint,
-		"bareTableName": bareTableName,
+		"inputKind":            inputKind,
+		"filterHint":           filterHint,
+		"bareTableName":        bareTableName,
+		"isReservedFilterName": isReservedFilterName,
+		"reservedFilterNames":  reservedFilterNames,
 	}).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("ui: parse templates: %w", err)

@@ -3,6 +3,7 @@ package ui
 import (
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/mickamy/adms/internal/logger"
@@ -145,6 +146,28 @@ func filterHint(c schema.Column) string {
 	}
 
 	return "foo, like.*foo*, ilike.*foo*"
+}
+
+// reservedFilterNamesList is the single source of truth for the
+// query-string keys the adms parser owns for pagination / projection /
+// grouping (see internal/query/parser.go). Both helpers below read from
+// it so the server-side template suppression and the client-side URL
+// builder cannot drift apart.
+var reservedFilterNamesList = []string{"select", "order", "limit", "offset", "and", "or"}
+
+// reservedFilterNames is exposed as a template function so the table-view
+// JS RESERVED_KEYS Set can be rendered from the Go side. It returns a
+// fresh copy so callers cannot mutate the shared list.
+func reservedFilterNames() []string {
+	return slices.Clone(reservedFilterNamesList)
+}
+
+// isReservedFilterName reports whether a column name collides with one
+// of those keys. A table whose column matches cannot be filtered
+// through the API, so the table-view template skips the filter input
+// for it and the JS buildURL guard skips the matching URL parameter.
+func isReservedFilterName(name string) bool {
+	return slices.Contains(reservedFilterNamesList, name)
 }
 
 // SinglePKColumn returns the lone PK column or "" if the table has a
