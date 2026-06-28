@@ -7,6 +7,13 @@
   </div>
   <div class="flex items-center gap-3">
     <div class="text-sm text-zinc-400" id="content-range">—</div>
+    <div class="flex items-center gap-1">
+      <span class="text-sm text-zinc-500">Export</span>
+      <button type="button" data-export="csv" aria-label="Export current results as CSV"
+        class="px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">CSV</button>
+      <button type="button" data-export="json" aria-label="Export current results as JSON"
+        class="px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">JSON</button>
+    </div>
     <a href="/t/{{.Name}}/schema" class="text-sm text-zinc-400 hover:text-zinc-200">Schema →</a>
     {{if not $.ReadOnly}}
     <a href="/t/{{.Name}}/new" class="px-3 py-1 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">+ New</a>
@@ -208,6 +215,32 @@
       } catch (_) { return text || String(resp.status); }
     }
 
+    // downloadExport saves the current filtered query (same URL the table
+    // renders from, including its paging) as a file. CSV is negotiated via
+    // Accept; JSON is the server default. The Authorization header is added
+    // by the layout fetch wrapper, so a plain fetch + Blob download works.
+    async function downloadExport(format) {
+      const accept = format === 'csv' ? 'text/csv' : 'application/json';
+      try {
+        const resp = await fetch(buildURL(), { headers: { Accept: accept } });
+        if (!resp.ok) {
+          alert('Export failed: ' + await readError(resp));
+          return;
+        }
+        const blob = await resp.blob();
+        const objectURL = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectURL;
+        a.download = tableName + '.' + format;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectURL);
+      } catch (err) {
+        alert('Export failed: ' + err.message);
+      }
+    }
+
     function skeletonRows(count) {
       // Five gray bars per row by default — the row count gives a hint
       // of "data is coming" without claiming the actual page size.
@@ -312,6 +345,10 @@
     document.getElementById('prev').addEventListener('click', () => {
       offsetInput.value = Math.max(0, Number(offsetInput.value || 0) - Number(limitInput.value || 20));
       load();
+    });
+
+    document.querySelectorAll('[data-export]').forEach((btn) => {
+      btn.addEventListener('click', () => downloadExport(btn.dataset.export));
     });
 
     document.querySelectorAll('thead [data-col]').forEach((th) => {

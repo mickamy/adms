@@ -940,6 +940,34 @@ func TestBuildURLGuardsReservedKeysFromColumnFilters(t *testing.T) {
 	}
 }
 
+func TestTableViewRendersExportControls(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`data-export="csv"`,
+		`data-export="json"`,
+		`aria-label="Export current results as CSV"`,
+		`aria-label="Export current results as JSON"`,
+		// downloadExport negotiates CSV via Accept, defaults to JSON, and
+		// names the file after the table.
+		`const accept = format === 'csv' ? 'text/csv' : 'application/json';`,
+		`a.download = tableName + '.' + format;`,
+		// The buttons are wired to downloadExport.
+		`btn.addEventListener('click', () => downloadExport(btn.dataset.export));`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("export controls missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
 func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
 	t.Parallel()
 
