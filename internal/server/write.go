@@ -402,7 +402,7 @@ func (s *Server) executeWrite(
 		}
 		defer func() { _ = rows.Close() }()
 
-		result, err := rowsToJSON(rows, nil)
+		_, result, err := scanRows(rows, nil)
 		if err != nil {
 			s.writeDBError(w, r, err, "encode rows")
 
