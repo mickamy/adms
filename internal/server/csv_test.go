@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mickamy/adms/internal/server"
 )
@@ -20,6 +21,12 @@ type failingWriter struct{}
 func (failingWriter) Header() http.Header       { return http.Header{} }
 func (failingWriter) WriteHeader(int)           {}
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("boom") }
+
+// errMarshaler is a TextMarshaler that always fails, exercising csvCell's
+// fallback when MarshalText errors.
+type errMarshaler struct{}
+
+func (errMarshaler) MarshalText() ([]byte, error) { return nil, errors.New("nope") }
 
 func TestWantsCSV(t *testing.T) {
 	t.Parallel()
@@ -64,6 +71,10 @@ func TestCSVCell(t *testing.T) {
 		{"int64", int64(42), "42"},
 		{"float64", 3.5, "3.5"},
 		{"bool", true, "true"},
+		// time.Time is a TextMarshaler: RFC 3339, matching the JSON response.
+		{"time", time.Date(2023, 10, 12, 15, 4, 5, 0, time.UTC), "2023-10-12T15:04:05Z"},
+		// A TextMarshaler that errors falls back to fmt's default.
+		{"marshal error fallback", errMarshaler{}, "{}"},
 	}
 
 	for _, tt := range tests {

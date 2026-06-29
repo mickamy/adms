@@ -54,8 +54,11 @@ func writeCSV(w http.ResponseWriter, cols []string, rows []map[string]any) error
 }
 
 // csvCell formats a scanned value for a CSV cell. The type set mirrors
-// what rowsToJSON produces: strings, json.RawMessage for embeds, []byte
-// for non-UTF-8 binary, and the driver scalar types otherwise.
+// what scanRows produces: strings, json.RawMessage for embeds, []byte for
+// non-UTF-8 binary, and the driver scalar types otherwise. TextMarshaler
+// values (e.g., time.Time from a timestamp column) use MarshalText so the
+// cell matches the JSON response's RFC 3339 form rather than fmt's
+// Go-specific default.
 func csvCell(v any) string {
 	switch x := v.(type) {
 	case nil:
@@ -66,6 +69,12 @@ func csvCell(v any) string {
 		return string(x)
 	case []byte:
 		return base64.StdEncoding.EncodeToString(x)
+	case interface{ MarshalText() ([]byte, error) }:
+		if b, err := x.MarshalText(); err == nil {
+			return string(b)
+		}
+
+		return fmt.Sprintf("%v", x)
 	default:
 		return fmt.Sprintf("%v", x)
 	}
