@@ -235,7 +235,10 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
-        URL.revokeObjectURL(objectURL);
+        // Delay revocation: some browsers (Safari, older Firefox) schedule
+        // the download asynchronously and cancel it if the URL is revoked
+        // before the request starts.
+        setTimeout(() => URL.revokeObjectURL(objectURL), 100);
       } catch (err) {
         alert('Export failed: ' + err.message);
       }
