@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
+	"reflect"
 	"testing"
 	"time"
 
@@ -379,13 +379,7 @@ func TestReadHandlerPostgres_CSV(t *testing.T) {
 		{"2", `bob, "the builder"`},
 	}
 
-	if len(got) != len(want) {
-		t.Fatalf("rows = %d, want %d (%v)", len(got), len(want), got)
-	}
-
-	for i := range want {
-		if strings.Join(got[i], "|") != strings.Join(want[i], "|") {
-			t.Errorf("row %d = %v, want %v", i, got[i], want[i])
-		}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CSV content mismatch:\ngot:  %#v\nwant: %#v", got, want)
 	}
 }
