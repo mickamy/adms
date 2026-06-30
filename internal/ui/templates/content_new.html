@@ -5,45 +5,45 @@
     <h1 class="text-2xl font-semibold">New row · {{.Name}}</h1>
     <p class="text-zinc-500 text-sm">{{.Schema}}</p>
   </div>
-  <a href="/t/{{.Name}}" class="text-sm text-zinc-400 hover:text-zinc-200">← Back</a>
+  <a href="/t/{{.Name}}" class="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200">← Back</a>
 </div>
 
 <form id="row-form" class="space-y-3 max-w-2xl">
   {{range .Columns}}
   <div>
-    <label class="block text-zinc-400 text-sm mb-1">
+    <label class="block text-zinc-600 dark:text-zinc-400 text-sm mb-1">
       {{.Name}}
-      <span class="text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
+      <span class="text-zinc-500 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
     </label>
     {{$kind := inputKind .}}
     {{if eq $kind "boolean"}}
     <select data-col="{{.Name}}" data-kind="boolean" name="{{.Name}}"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
       <option value=""></option>
       <option value="true">true</option>
       <option value="false">false</option>
     </select>
     {{else if eq $kind "json"}}
     <textarea data-col="{{.Name}}" data-kind="json" name="{{.Name}}" rows="3" placeholder="empty = column default / NULL"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600 font-mono text-xs"></textarea>
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 font-mono text-xs"></textarea>
     {{else if eq $kind "integer"}}
     <input data-col="{{.Name}}" data-kind="integer" name="{{.Name}}" type="number" step="1" placeholder="empty = column default / NULL"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
     {{else if eq $kind "number"}}
     <input data-col="{{.Name}}" data-kind="number" name="{{.Name}}" type="number" step="any" placeholder="empty = column default / NULL"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
     {{else if eq $kind "date"}}
     <input data-col="{{.Name}}" data-kind="date" name="{{.Name}}" type="date"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
     {{else}}
     <input data-col="{{.Name}}" data-kind="text" name="{{.Name}}" type="text" placeholder="empty = column default / NULL"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
     {{end}}
   </div>
   {{end}}
   <div class="flex gap-2 items-center pt-2">
-    <button type="submit" class="px-3 py-1.5 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">Insert</button>
-    <span id="status" role="status" aria-live="polite" class="text-sm text-zinc-400"></span>
+    <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-white">Insert</button>
+    <span id="status" role="status" aria-live="polite" class="text-sm text-zinc-600 dark:text-zinc-400"></span>
   </div>
 </form>
 
@@ -57,7 +57,7 @@
 
     function setStatus(msg, isError) {
       status.textContent = msg;
-      status.className = 'text-sm ' + (isError ? 'text-red-400' : 'text-zinc-400');
+      status.className = 'text-sm ' + (isError ? 'text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-400');
     }
 
     async function readError(resp) {

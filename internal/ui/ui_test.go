@@ -379,7 +379,7 @@ func TestSchemaViewRendersTableMetadata(t *testing.T) {
 		`· PK: id ·`,
 		`>Referenced by<`,
 		// Referenced-by row: linked source table + qualified right-hand side
-		`<a href="/t/posts/schema" class="text-zinc-100 hover:underline">public.posts</a>(user_id)`,
+		`<a href="/t/posts/schema" class="text-zinc-900 dark:text-zinc-100 hover:underline">public.posts</a>(user_id)`,
 		`public.users(id)`,
 		`>Indexes<`,
 		`users_pkey`,
@@ -406,7 +406,7 @@ func TestSchemaViewRendersTableMetadata(t *testing.T) {
 	for _, want := range []string{
 		`>Foreign keys<`,
 		// Outgoing FK row: linked target table
-		`<a href="/t/users/schema" class="text-zinc-100 hover:underline">public.users</a>(id)`,
+		`<a href="/t/users/schema" class="text-zinc-900 dark:text-zinc-100 hover:underline">public.users</a>(id)`,
 	} {
 		if !strings.Contains(pbody, want) {
 			t.Errorf("posts schema view missing %q", want)
@@ -1008,7 +1008,7 @@ func TestTableViewRowKeyboardNavigation(t *testing.T) {
 
 	for _, want := range []string{
 		// Rendered rows carry the data-row marker the nav selects over.
-		`<tr data-row class="hover:bg-zinc-900">`,
+		`<tr data-row class="hover:bg-zinc-100 dark:hover:bg-zinc-900">`,
 		`tbody.querySelectorAll('tr[data-row]')`,
 		// Arrow keys move the highlight; Enter opens the selected row.
 		`if (e.key === 'ArrowDown') {`,

@@ -6,17 +6,17 @@
     <p class="text-zinc-500 text-sm">{{.Schema}}{{if .PrimaryKey}} · PK: {{range $i, $col := .PrimaryKey}}{{if $i}}, {{end}}{{$col}}{{end}}{{end}}</p>
   </div>
   <div class="flex items-center gap-3">
-    <div class="text-sm text-zinc-400" id="content-range">—</div>
+    <div class="text-sm text-zinc-600 dark:text-zinc-400" id="content-range">—</div>
     <div class="flex items-center gap-1">
       <span class="text-sm text-zinc-500">Export</span>
       <button type="button" data-export="csv" aria-label="Export current results as CSV"
-        class="px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">CSV</button>
+        class="px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">CSV</button>
       <button type="button" data-export="json" aria-label="Export current results as JSON"
-        class="px-2 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">JSON</button>
+        class="px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">JSON</button>
     </div>
-    <a href="/t/{{.Name}}/schema" class="text-sm text-zinc-400 hover:text-zinc-200">Schema →</a>
+    <a href="/t/{{.Name}}/schema" class="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200">Schema →</a>
     {{if not $.ReadOnly}}
-    <a href="/t/{{.Name}}/new" class="px-3 py-1 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">+ New</a>
+    <a href="/t/{{.Name}}/new" class="px-3 py-1 rounded bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-white">+ New</a>
     {{end}}
   </div>
 </div>
@@ -25,40 +25,40 @@
   <div>
     <label class="block text-zinc-500 text-xs mb-1">order=</label>
     <input name="order" value="{{if .PrimaryKey}}{{index .PrimaryKey 0}}.asc{{end}}" placeholder="col.desc,col2.asc"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
   </div>
   <div>
     <label class="block text-zinc-500 text-xs mb-1">limit=</label>
     <input name="limit" type="number" min="1" value="20"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
   </div>
   <div>
     <label class="block text-zinc-500 text-xs mb-1">offset=</label>
     <input name="offset" type="number" min="0" value="0"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
   </div>
   {{range .Columns}}
   <div>
     <label class="block text-zinc-500 text-xs mb-1">{{.Name}}=</label>
     {{if isReservedFilterName .Name}}
-    <p class="text-xs text-zinc-600 italic px-2 py-1">column name is reserved — filter unavailable</p>
+    <p class="text-xs text-zinc-500 italic px-2 py-1">column name is reserved — filter unavailable</p>
     {{else}}
     <input name="{{.Name}}" data-filter-kind="{{inputKind .}}" placeholder="{{filterHint .}}"
-      class="w-full px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+      class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
     {{end}}
   </div>
   {{end}}
 </form>
 
-<div class="overflow-x-auto border border-zinc-800 rounded">
+<div class="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded">
   <table class="min-w-full text-sm">
-    <thead class="bg-zinc-900 text-zinc-400">
+    <thead class="bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400">
       <tr>
-        {{range .Columns}}<th data-col="{{.Name}}" class="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none">{{.Name}}<span class="text-zinc-600 text-xs ml-1">{{.Type}}</span></th>{{end}}
+        {{range .Columns}}<th data-col="{{.Name}}" class="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none">{{.Name}}<span class="text-zinc-500 text-xs ml-1">{{.Type}}</span></th>{{end}}
         {{if and $.RowPKColumn (not $.ReadOnly)}}<th class="px-3 py-2 text-right font-medium">actions</th>{{end}}
       </tr>
     </thead>
-    <tbody id="rows" aria-live="polite" aria-busy="true" class="divide-y divide-zinc-800">
+    <tbody id="rows" aria-live="polite" aria-busy="true" class="divide-y divide-zinc-200 dark:divide-zinc-800">
       <tr><td colspan="{{len .Columns}}" class="px-3 py-6 text-zinc-500 text-center">Loading…</td></tr>
     </tbody>
   </table>
@@ -66,61 +66,61 @@
 
 <div class="mt-4 flex gap-2">
   <button type="button" id="prev"
-    class="px-3 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">Prev</button>
+    class="px-3 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">Prev</button>
   <button type="button" id="next"
-    class="px-3 py-1 rounded bg-zinc-900 border border-zinc-800 text-sm hover:bg-zinc-800">Next</button>
+    class="px-3 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">Next</button>
 </div>
 
 {{if and $.RowPKColumn (not $.ReadOnly)}}
 <dialog id="edit-modal" aria-labelledby="edit-modal-title" class="rounded-lg p-0 bg-transparent backdrop:bg-black/60">
-  <form id="edit-form" class="space-y-3 bg-zinc-950 text-zinc-100 border border-zinc-800 rounded-lg p-6 w-[40rem] max-w-[90vw]">
+  <form id="edit-form" class="space-y-3 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-800 rounded-lg p-6 w-[40rem] max-w-[90vw]">
     <header class="flex items-start justify-between gap-4 mb-2">
       <div>
         <h2 id="edit-modal-title" class="text-lg font-semibold">Edit row</h2>
         <p class="text-zinc-500 text-sm" id="edit-meta">—</p>
       </div>
-      <a id="edit-fullpage-link" href="#" class="text-sm text-zinc-400 hover:text-zinc-200 whitespace-nowrap">Open full page →</a>
+      <a id="edit-fullpage-link" href="#" class="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 whitespace-nowrap">Open full page →</a>
     </header>
     {{range .Columns}}
     <div>
-      <label class="block text-zinc-400 text-sm mb-1">
+      <label class="block text-zinc-600 dark:text-zinc-400 text-sm mb-1">
         {{.Name}}
-        <span class="text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
+        <span class="text-zinc-500 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
       </label>
       <div class="flex items-center gap-2">
         {{$kind := inputKind .}}
         {{if eq $kind "boolean"}}
         <select data-edit-col="{{.Name}}" data-kind="boolean" name="{{.Name}}"
-          class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+          class="flex-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
           <option value=""></option>
           <option value="true">true</option>
           <option value="false">false</option>
         </select>
         {{else if eq $kind "json"}}
         <textarea data-edit-col="{{.Name}}" data-kind="json" name="{{.Name}}" rows="3"
-          class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600 font-mono text-xs"></textarea>
+          class="flex-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 font-mono text-xs"></textarea>
         {{else if eq $kind "integer"}}
         <input data-edit-col="{{.Name}}" data-kind="integer" name="{{.Name}}" type="number" step="1"
-          class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+          class="flex-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
         {{else if eq $kind "number"}}
         <input data-edit-col="{{.Name}}" data-kind="number" name="{{.Name}}" type="number" step="any"
-          class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+          class="flex-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
         {{else if eq $kind "date"}}
         <input data-edit-col="{{.Name}}" data-kind="date" name="{{.Name}}" type="date"
-          class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+          class="flex-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
         {{else}}
         <input data-edit-col="{{.Name}}" data-kind="text" name="{{.Name}}" type="text"
-          class="flex-1 px-2 py-1 rounded bg-zinc-900 border border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-600">
+          class="flex-1 px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
         {{end}}
-        <a data-edit-fk-link="{{.Name}}" href="#" class="hidden text-zinc-400 hover:text-zinc-100 text-sm whitespace-nowrap"></a>
+        <a data-edit-fk-link="{{.Name}}" href="#" class="hidden text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 text-sm whitespace-nowrap"></a>
       </div>
     </div>
     {{end}}
     <footer class="flex gap-2 items-center pt-2">
-      <button type="submit" class="px-3 py-1.5 rounded bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white">Save</button>
-      <button type="button" id="edit-delete" class="px-3 py-1.5 rounded bg-red-900/60 text-red-100 text-sm hover:bg-red-900">Delete</button>
-      <button type="button" id="edit-cancel" class="px-3 py-1.5 rounded bg-zinc-800 text-zinc-200 text-sm hover:bg-zinc-700">Cancel</button>
-      <span id="edit-status" role="status" aria-live="polite" class="text-sm text-zinc-400"></span>
+      <button type="submit" class="px-3 py-1.5 rounded bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-white">Save</button>
+      <button type="button" id="edit-delete" class="px-3 py-1.5 rounded bg-red-100 dark:bg-red-900/60 text-red-900 dark:text-red-100 text-sm hover:bg-red-200 dark:hover:bg-red-900">Delete</button>
+      <button type="button" id="edit-cancel" class="px-3 py-1.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-sm hover:bg-zinc-300 dark:hover:bg-zinc-700">Cancel</button>
+      <span id="edit-status" role="status" aria-live="polite" class="text-sm text-zinc-600 dark:text-zinc-400"></span>
     </footer>
   </form>
 </dialog>
@@ -251,11 +251,11 @@
       // motion-safe gates the pulse on prefers-reduced-motion=no-preference
       // so reduced-motion users see a static placeholder instead of a
       // shimmering one.
-      const cellBar = `<span class="block h-3 w-full bg-zinc-800 rounded motion-safe:animate-pulse"></span>`;
+      const cellBar = `<span class="block h-3 w-full bg-zinc-200 dark:bg-zinc-800 rounded motion-safe:animate-pulse"></span>`;
       const cellHTML = columns.map(() => `<td class="px-3 py-2">${cellBar}</td>`).join('');
       let actionsHTML = '';
       if (pkColumn && !uiReadOnly) {
-        actionsHTML = `<td class="px-3 py-2 text-right"><span class="inline-block h-3 w-16 bg-zinc-800 rounded motion-safe:animate-pulse"></span></td>`;
+        actionsHTML = `<td class="px-3 py-2 text-right"><span class="inline-block h-3 w-16 bg-zinc-200 dark:bg-zinc-800 rounded motion-safe:animate-pulse"></span></td>`;
       }
       const row = `<tr aria-hidden="true">${cellHTML}${actionsHTML}</tr>`;
       return row.repeat(count);
@@ -274,12 +274,12 @@
         const resp = await fetch(buildURL(), { headers: { Prefer: 'count=exact' } });
         rangeEl.textContent = resp.headers.get('Content-Range') || '—';
         if (!resp.ok) {
-          tbody.innerHTML = `<tr><td colspan="${colSpan}" role="alert" class="px-3 py-6 text-red-400 text-center">${escapeHTML(await readError(resp))}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="${colSpan}" role="alert" class="px-3 py-6 text-red-600 dark:text-red-400 text-center">${escapeHTML(await readError(resp))}</td></tr>`;
           return;
         }
         renderRows(await resp.json());
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="${colSpan}" role="alert" class="px-3 py-6 text-red-400 text-center">${escapeHTML(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" role="alert" class="px-3 py-6 text-red-600 dark:text-red-400 text-center">${escapeHTML(err.message)}</td></tr>`;
       } finally {
         tbody.setAttribute('aria-busy', 'false');
       }
@@ -297,14 +297,14 @@
           const v = row[c];
           let cell;
           if (v === null || v === undefined) {
-            cell = '<span class="text-zinc-600">null</span>';
+            cell = '<span class="text-zinc-500">null</span>';
           } else {
             const text = escapeHTML(typeof v === 'object' ? JSON.stringify(v) : v);
             const ref = outgoingFKs[c];
             if (ref) {
               const target = '/t/' + encodeURIComponent(ref.table) + '/r/' + encodeURIComponent(String(v));
               const label = `Open ${escapeHTML(ref.table)} row ${escapeHTML(String(v))}`;
-              cell = `${text} <a href="${target}" aria-label="${label}" class="text-zinc-500 hover:text-zinc-100 text-xs ml-1">→</a>`;
+              cell = `${text} <a href="${target}" aria-label="${label}" class="text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 text-xs ml-1">→</a>`;
             } else {
               cell = text;
             }
@@ -326,11 +326,11 @@
         if (pkColumn && !uiReadOnly) {
           const pkVal = encodeURIComponent(pkRaw);
           actions = `<td class="px-3 py-2 align-top text-right whitespace-nowrap">
-            <button type="button" data-edit-pk="${pkVal}" class="text-zinc-300 hover:text-zinc-100 mr-3">edit</button>
-            <button type="button" data-delete="${pkVal}" class="text-red-400 hover:text-red-300">delete</button>
+            <button type="button" data-edit-pk="${pkVal}" class="text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 mr-3">edit</button>
+            <button type="button" data-delete="${pkVal}" class="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">delete</button>
           </td>`;
         }
-        return `<tr data-row class="hover:bg-zinc-900">${cells}${actions}</tr>`;
+        return `<tr data-row class="hover:bg-zinc-100 dark:hover:bg-zinc-900">${cells}${actions}</tr>`;
       }).join('');
       selectedRow = -1;
     }
@@ -378,7 +378,9 @@
       selectedRow = (idx + rows.length) % rows.length;
       rows.forEach((tr, i) => {
         const on = i === selectedRow;
-        tr.classList.toggle('bg-zinc-800', on);
+        // Two tokens (classList.toggle takes one each) for theme-aware highlight.
+        tr.classList.toggle('bg-zinc-200', on);
+        tr.classList.toggle('dark:bg-zinc-800', on);
         if (on) tr.scrollIntoView({ block: 'nearest' });
       });
     }
@@ -422,7 +424,7 @@
     function setEditStatus(msg, isError) {
       if (!editStatus) return;
       editStatus.textContent = msg || '';
-      editStatus.className = 'text-sm ' + (isError ? 'text-red-400' : 'text-zinc-400');
+      editStatus.className = 'text-sm ' + (isError ? 'text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-400');
     }
 
     const editFKLinks = new Map();
@@ -589,7 +591,7 @@
       const originalHTML = td.innerHTML;
 
       const input = createCellEditInput(kind);
-      input.className = 'w-full px-1 py-0.5 rounded bg-zinc-800 border border-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600 text-sm';
+      input.className = 'w-full px-1 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 text-sm';
       admsSetInputValue(input, rawValue);
 
       td.innerHTML = '';

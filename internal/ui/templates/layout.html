@@ -1,9 +1,24 @@
 {{define "layout.html"}}<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}}</title>
+  <script>
+    // Set the theme class before the stylesheet applies so there is no
+    // flash: an explicit choice in localStorage wins, otherwise follow the
+    // OS preference (defaulting to dark if it is unavailable).
+    (function () {
+      try {
+        var stored = localStorage.getItem('adms-theme');
+        var dark = stored ? stored === 'dark'
+                          : matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (_) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="/static/css/tailwind.css">
   <meta name="adms-api-origin" content="{{.APIOrigin}}">
   {{if .AuthToken}}<meta name="adms-auth-token" content="{{.AuthToken}}">{{end}}
@@ -71,14 +86,21 @@
     }
   </script>
 </head>
-<body class="bg-zinc-950 text-zinc-100 min-h-screen flex">
+<body class="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 min-h-screen flex">
   <a href="#main-content"
-    class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:px-3 focus:py-1 focus:rounded focus:bg-zinc-100 focus:text-zinc-900 focus:text-sm">Skip to content</a>
-  <aside class="w-64 shrink-0 border-r border-zinc-800 p-4 overflow-y-auto h-screen sticky top-0">
-    <a href="/" class="block font-semibold text-zinc-100 mb-3">adms</a>
+    class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:px-3 focus:py-1 focus:rounded focus:bg-zinc-900 dark:focus:bg-zinc-100 focus:text-zinc-50 dark:focus:text-zinc-900 focus:text-sm">Skip to content</a>
+  <aside class="w-64 shrink-0 border-r border-zinc-200 dark:border-zinc-800 p-4 overflow-y-auto h-screen sticky top-0">
+    <div class="flex items-center justify-between mb-3">
+      <a href="/" class="font-semibold text-zinc-900 dark:text-zinc-100">adms</a>
+      <button type="button" id="theme-toggle" title="Toggle theme"
+        aria-label="Toggle light and dark theme"
+        class="px-2 py-1 rounded text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">
+        <span class="inline dark:hidden">🌙</span><span class="hidden dark:inline">☀</span>
+      </button>
+    </div>
     <label for="table-filter" class="sr-only">Filter tables</label>
     <input id="table-filter" type="search" placeholder="Filter tables…"
-      class="w-full px-2 py-1 mb-3 rounded bg-zinc-900 border border-zinc-800 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-600"
+      class="w-full px-2 py-1 mb-3 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
       oninput="filterTables(this.value)">
     <nav aria-label="Tables">
       <ul class="space-y-1 text-sm">
@@ -87,7 +109,7 @@
           <a href="/t/{{.Name}}"
             data-table-name="{{.Name}}"
             {{if eq $.ActiveTable .Name}}aria-current="page"{{end}}
-            class="block px-2 py-1 rounded hover:bg-zinc-800 {{if eq $.ActiveTable .Name}}bg-zinc-800 text-zinc-50{{else}}text-zinc-300{{end}}">
+            class="block px-2 py-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 {{if eq $.ActiveTable .Name}}bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50{{else}}text-zinc-700 dark:text-zinc-300{{end}}">
             <div class="break-all">{{.Name}}</div>
             <div class="text-zinc-500 text-xs">{{.Schema}}</div>
           </a>
@@ -107,11 +129,11 @@
     {{if eq .ContentTmpl "content_schema.html"}}{{template "content_schema.html" .}}{{end}}
   </main>
   <dialog id="cmd-palette" aria-label="Jump to table"
-    class="w-[40rem] max-w-[90vw] rounded-lg bg-zinc-900 border border-zinc-800 p-0 text-zinc-100 backdrop:bg-black/60">
+    class="w-[40rem] max-w-[90vw] rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-0 text-zinc-900 dark:text-zinc-100 backdrop:bg-black/60">
     <input id="cmd-input" type="text" role="combobox" aria-expanded="true"
       aria-controls="cmd-results" aria-autocomplete="list" autocomplete="off"
       placeholder="Jump to table…"
-      class="w-full px-3 py-2 bg-transparent border-b border-zinc-800 text-sm focus:outline-none">
+      class="w-full px-3 py-2 bg-transparent border-b border-zinc-200 dark:border-zinc-800 text-sm focus:outline-none">
     <div id="cmd-results" role="listbox" aria-label="Tables"
       class="max-h-80 overflow-y-auto py-1 text-sm"></div>
   </dialog>
@@ -123,6 +145,16 @@
         a.parentElement.style.display = name.includes(needle) ? '' : 'none';
       });
     }
+
+    // Theme toggle: flip the dark class and remember the explicit choice.
+    (function () {
+      const btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        const dark = document.documentElement.classList.toggle('dark');
+        try { localStorage.setItem('adms-theme', dark ? 'dark' : 'light'); } catch (_) {}
+      });
+    })();
 
     // Cmd/Ctrl+K command palette: a quick "jump to table" overlay built
     // from the same sidebar links, so it stays in sync with the exposed
@@ -148,7 +180,8 @@
         opts.forEach((el, i) => {
           const on = i === active;
           el.setAttribute('aria-selected', on ? 'true' : 'false');
-          el.classList.toggle('bg-zinc-800', on);
+          el.classList.toggle('bg-zinc-200', on);
+          el.classList.toggle('dark:bg-zinc-800', on);
           if (on) {
             input.setAttribute('aria-activedescendant', el.id);
             el.scrollIntoView({ block: 'nearest' });
