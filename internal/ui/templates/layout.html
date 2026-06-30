@@ -112,8 +112,8 @@
       aria-controls="cmd-results" aria-autocomplete="list" autocomplete="off"
       placeholder="Jump to table…"
       class="w-full px-3 py-2 bg-transparent border-b border-zinc-800 text-sm focus:outline-none">
-    <ul id="cmd-results" role="listbox" aria-label="Tables"
-      class="max-h-80 overflow-y-auto py-1 text-sm"></ul>
+    <div id="cmd-results" role="listbox" aria-label="Tables"
+      class="max-h-80 overflow-y-auto py-1 text-sm"></div>
   </dialog>
   <script>
     function filterTables(q) {
@@ -168,7 +168,7 @@
             + ` class="block px-3 py-1.5 cursor-pointer">${escapeHTML(t.name)}</a>`).join('');
           active = 0;
         } else {
-          results.innerHTML = '<li role="option" aria-disabled="true" class="px-3 py-1.5 text-zinc-500">No tables.</li>';
+          results.innerHTML = '<div role="option" aria-disabled="true" class="px-3 py-1.5 text-zinc-500">No tables.</div>';
           active = -1;
         }
         syncActive();
