@@ -35,3 +35,18 @@ func IsReservedFilterName(name string) bool {
 }
 
 type FKRef = fkRef
+
+type (
+	ERDView   = erdView
+	ERDColumn = erdColumn
+)
+
+func BuildERD(tables []schema.Table) ERDView { return buildERD(tables) }
+
+func KeyColumns(t schema.Table) []ERDColumn { return keyColumns(t) }
+
+// BorderPoint exposes the border-clipping geometry with plain coordinates
+// so the test does not need to construct an unexported node.
+func BorderPoint(x, y, w, h, tx, ty float64) (float64, float64) {
+	return borderPoint(erdNode{X: x, Y: y, W: w, H: h}, tx, ty)
+}

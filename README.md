@@ -10,8 +10,7 @@ PostgREST-style HTTP API for PostgreSQL and MySQL, plus an optional bundled admi
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/mickamy?label=sponsor&logo=github)](https://github.com/sponsors/mickamy)
 
-> Status: the read / write API and the bundled admin UI both ship — see the [Roadmap](#roadmap). Remaining items are
-> UI polish (CSV / JSON export, keyboard shortcuts, ER diagram, full a11y pass).
+> Status: the read / write API and the bundled admin UI both ship, including CSV / JSON export, keyboard shortcuts, an a11y pass, and a schema ER diagram.
 
 ## TL;DR
 
@@ -566,25 +565,6 @@ listen = ":7778"
 
 Working examples live in [`examples/adms.yaml`](examples/adms.yaml) and [`examples/adms.toml`](examples/adms.toml).
 
-## Roadmap
-
-- [x] Phase 0 — CLI scaffolding, goreleaser metadata
-- [x] Phase 1 — Schema introspection (PostgreSQL + MySQL, including indexes with method and partial predicate)
-- [x] Phase 1.5 — Config-file driven CLI; subcommands and per-setting flags removed
-- [x] Phase 2 — HTTP server, `GET /` schema endpoint, `GET /healthz`, graceful shutdown
-- [x] Phase 3 — Read API: filter (incl. `cs` / `cd` JSON / array containment), projection, ordering, paging
-- [x] Phase 4 — Read API: relation embedding (FK-aware JSON aggregation)
-- [x] Phase 5 — Write API: `POST` / `PATCH` / `DELETE`, `Prefer` header, `Content-Range`
-- [x] Phase 6 — CORS, structured logging, panic recovery, `read_only`, allowlists, bearer token
-- [x] Phase 7 — Bundled admin UI (opt-in via `ui.enabled`): separate listener (`ui.listen`, default `:7778`),
-  HTML/CSS/JS embedded via `embed.FS`, SSR with `html/template` + minified Tailwind, CORS auto-configured, dark mode,
-  type-aware form inputs, inline cell + modal edit, FK navigation, schema viewer, bearer-token forwarding, read-only
-  gating
-- [x] CSV / JSON export of filtered query results
-- [x] Keyboard shortcuts (`Cmd/Ctrl+K` table palette, `↑↓` row navigation)
-- [x] a11y polish (skeleton loaders, explicit empty / error states, light-mode toggle)
-- [ ] Schema viewer ER diagram
-
 ## Why not PostgREST?
 
 Use PostgREST if you are PostgreSQL-only and want a battle-tested project with a large community — it is genuinely
@@ -609,8 +589,8 @@ shoulders — thank you.
 
 If `adms` saves you time, consider supporting ongoing development
 via [GitHub Sponsors](https://github.com/sponsors/mickamy). Sponsorships pay for the maintenance time that keeps
-Postgres / MySQL parity, security fixes, and roadmap items moving.
+Postgres / MySQL parity, security fixes, and new features moving.
 
 ## License
 
-[MIT](LICENSE) © 2026 Tetsuro Mikami
+[MIT](LICENSE)

@@ -35,6 +35,10 @@ type Server struct {
 	schema    schema.Schema
 	readOnly  bool
 	tmpl      *template.Template
+	// erd is laid out once at startup; the schema is fixed for the
+	// process lifetime, so there is no need to re-run the force
+	// simulation on every request.
+	erd erdView
 }
 
 // New constructs the UI server. apiOrigin is the URL the browser uses to
@@ -56,6 +60,9 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 		"bareTableName":        bareTableName,
 		"isReservedFilterName": isReservedFilterName,
 		"reservedFilterNames":  reservedFilterNames,
+		"add":                  func(a, b int) int { return a + b },
+		"sub":                  func(a, b float64) float64 { return a - b },
+		"mul":                  func(a, b int) int { return a * b },
 	}).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("ui: parse templates: %w", err)
@@ -68,6 +75,7 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 		schema:    sch,
 		readOnly:  cfg.ReadOnly,
 		tmpl:      tmpl,
+		erd:       buildERD(sch.Tables),
 	}, nil
 }
 
@@ -140,6 +148,7 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("GET /__healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.index)
+	mux.HandleFunc("GET /schema", s.schemaDiagram)
 	mux.HandleFunc("GET /t/{table}", s.tableView)
 	mux.HandleFunc("GET /t/{table}/schema", s.schemaView)
 	mux.HandleFunc("GET /t/{table}/new", s.newRow)

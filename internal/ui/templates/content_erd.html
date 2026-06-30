@@ -1,0 +1,122 @@
+{{define "content_erd.html"}}
+{{with .ERD}}
+<div class="mb-4 flex items-end justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-semibold">Schema</h1>
+    <p class="text-zinc-500 text-sm">{{len .Nodes}} tables · foreign-key relationships · drag to pan, scroll to zoom</p>
+  </div>
+  <div class="flex items-center gap-1">
+    <button type="button" id="erd-zoom-out" aria-label="Zoom out"
+      class="px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">−</button>
+    <button type="button" id="erd-zoom-in" aria-label="Zoom in"
+      class="px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">+</button>
+    <button type="button" id="erd-reset" aria-label="Reset view"
+      class="px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm hover:bg-zinc-200 dark:hover:bg-zinc-800">Reset</button>
+  </div>
+</div>
+
+{{if .HasNodes}}
+<div id="erd-viewport"
+  class="overflow-hidden border border-zinc-200 dark:border-zinc-800 rounded bg-zinc-50 dark:bg-zinc-950 cursor-grab"
+  style="height: calc(100vh - 9rem)">
+  <svg id="erd-svg" role="img" aria-label="Entity relationship diagram"
+    width="100%" height="100%" viewBox="0 0 {{.Width}} {{.Height}}"
+    preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <marker id="erd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" class="fill-zinc-400 dark:fill-zinc-600"></path>
+      </marker>
+    </defs>
+    <g id="erd-pan">
+      {{range .Edges}}
+      {{if .Self}}
+      <path d="M {{.X1}} {{.Y1}} A 20 20 0 0 1 {{.X2}} {{.Y2}}" fill="none"
+        class="stroke-zinc-400 dark:stroke-zinc-600" stroke-width="1.5" marker-end="url(#erd-arrow)"></path>
+      {{else}}
+      <line x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}"
+        class="stroke-zinc-400 dark:stroke-zinc-600" stroke-width="1.5" marker-end="url(#erd-arrow)"></line>
+      {{end}}
+      {{end}}
+      {{range .Nodes}}
+      {{$w := .W}}
+      <a href="/t/{{.Name}}/schema" data-erd-node>
+        <g transform="translate({{.X}}, {{.Y}})">
+          <rect width="{{.W}}" height="{{.H}}" rx="6"
+            class="fill-white dark:fill-zinc-900 stroke-zinc-300 dark:stroke-zinc-700" stroke-width="1"></rect>
+          <rect width="{{.W}}" height="26" rx="6"
+            class="fill-zinc-100 dark:fill-zinc-800"></rect>
+          <rect y="20" width="{{.W}}" height="6" class="fill-zinc-100 dark:fill-zinc-800"></rect>
+          <text x="10" y="17" class="fill-zinc-900 dark:fill-zinc-100" style="font-size:13px;font-weight:600">{{.Name}}</text>
+          {{range $i, $col := .Columns}}
+          <text x="10" y="{{add 40 (mul $i 18)}}" class="fill-zinc-700 dark:fill-zinc-300" style="font-size:12px">{{$col.Name}}</text>
+          <text x="{{sub $w 10}}" y="{{add 40 (mul $i 18)}}" text-anchor="end" style="font-size:10px"
+            class="{{if $col.PK}}fill-amber-600 dark:fill-amber-500{{else}}fill-zinc-500{{end}}">{{if $col.PK}}PK{{else}}FK{{end}}</text>
+          {{end}}
+        </g>
+      </a>
+      {{end}}
+    </g>
+  </svg>
+</div>
+{{else}}
+<p class="text-zinc-500 text-sm">No tables to diagram.</p>
+{{end}}
+
+<script>
+  (function () {
+    const viewport = document.getElementById('erd-viewport');
+    const pan = document.getElementById('erd-pan');
+    if (!viewport || !pan) return;
+
+    let scale = 1, tx = 0, ty = 0;
+    let dragging = false, moved = false, sx = 0, sy = 0;
+
+    function apply() {
+      pan.setAttribute('transform', `translate(${tx}, ${ty}) scale(${scale})`);
+    }
+
+    function zoom(factor, ox, oy) {
+      // Keep the point under the cursor stationary while scaling.
+      const next = Math.min(4, Math.max(0.1, scale * factor));
+      const rect = viewport.getBoundingClientRect();
+      const px = (ox - rect.left - tx) / scale;
+      const py = (oy - rect.top - ty) / scale;
+      scale = next;
+      tx = ox - rect.left - px * scale;
+      ty = oy - rect.top - py * scale;
+      apply();
+    }
+
+    viewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY);
+    }, { passive: false });
+
+    viewport.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // left button only; don't hijack right/middle clicks
+      dragging = true; moved = false; sx = e.clientX - tx; sy = e.clientY - ty;
+      viewport.classList.add('cursor-grabbing');
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const nx = e.clientX - sx, ny = e.clientY - sy;
+      if (Math.abs(nx - tx) > 2 || Math.abs(ny - ty) > 2) moved = true;
+      tx = nx; ty = ny; apply();
+    });
+    window.addEventListener('mouseup', () => {
+      dragging = false;
+      viewport.classList.remove('cursor-grabbing');
+    });
+
+    // Suppress node navigation when the gesture was a pan, not a click.
+    pan.querySelectorAll('[data-erd-node]').forEach((a) => {
+      a.addEventListener('click', (e) => { if (moved) e.preventDefault(); });
+    });
+
+    document.getElementById('erd-zoom-in').addEventListener('click', () => zoom(1.2, viewport.getBoundingClientRect().left + viewport.clientWidth / 2, viewport.getBoundingClientRect().top + viewport.clientHeight / 2));
+    document.getElementById('erd-zoom-out').addEventListener('click', () => zoom(1 / 1.2, viewport.getBoundingClientRect().left + viewport.clientWidth / 2, viewport.getBoundingClientRect().top + viewport.clientHeight / 2));
+    document.getElementById('erd-reset').addEventListener('click', () => { scale = 1; tx = 0; ty = 0; apply(); });
+  })();
+</script>
+{{end}}
+{{end}}
