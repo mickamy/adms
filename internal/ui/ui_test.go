@@ -968,6 +968,65 @@ func TestTableViewRendersExportControls(t *testing.T) {
 	}
 }
 
+func TestLayoutRendersCommandPalette(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`id="cmd-palette"`,
+		`id="cmd-input"`,
+		`role="listbox"`,
+		// Cmd/Ctrl+K opens the palette.
+		`if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {`,
+		`palette.showModal();`,
+		// The palette is built from the sidebar's table links.
+		`document.querySelectorAll('aside [data-table-name]')`,
+		// Options are native anchors so modifier-clicks open a new tab.
+		`<a role="option" id="cmd-opt-`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("command palette missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
+func TestTableViewRowKeyboardNavigation(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// Rendered rows carry the data-row marker the nav selects over.
+		`<tr data-row class="hover:bg-zinc-900">`,
+		`tbody.querySelectorAll('tr[data-row]')`,
+		// Arrow keys move the highlight; Enter opens the selected row.
+		`if (e.key === 'ArrowDown') {`,
+		// Arrow nav wraps at both ends via modulo (consistent with the palette).
+		`selectedRow = (idx + rows.length) % rows.length;`,
+		`setSelectedRow(selectedRow < 0 ? -1 : selectedRow - 1);`,
+		`openEditModal(decodeURIComponent(btn.dataset.editPk))`,
+		// Typing in a field or activating a focused control must not be hijacked.
+		`if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A') return;`,
+		// Clicking a row syncs the selection so arrows continue from there.
+		`const tr = e.target.closest('tr[data-row]');`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("row keyboard navigation missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
 func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
 	t.Parallel()
 
