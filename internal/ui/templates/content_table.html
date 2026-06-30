@@ -154,6 +154,7 @@
     const limitInput = form.querySelector('input[name="limit"]');
     const offsetInput = form.querySelector('input[name="offset"]');
     let currentRows = [];
+    let selectedRow = -1;
 
     function escapeHTML(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -329,8 +330,9 @@
             <button type="button" data-delete="${pkVal}" class="text-red-400 hover:text-red-300">delete</button>
           </td>`;
         }
-        return `<tr class="hover:bg-zinc-900">${cells}${actions}</tr>`;
+        return `<tr data-row class="hover:bg-zinc-900">${cells}${actions}</tr>`;
       }).join('');
+      selectedRow = -1;
     }
 
     let debounce;
@@ -360,6 +362,43 @@
         orderInput.value = orderInput.value === col + '.asc' ? col + '.desc' : col + '.asc';
         load();
       });
+    });
+
+    // Up/Down move a highlight across the rendered rows; Enter opens the
+    // selected row's editor. Guarded so it never hijacks typing in a
+    // filter input or arrow keys inside an open dialog (palette / editor).
+    function dataRows() {
+      return tbody.querySelectorAll('tr[data-row]');
+    }
+
+    function setSelectedRow(idx) {
+      const rows = dataRows();
+      if (!rows.length) { selectedRow = -1; return; }
+      selectedRow = Math.max(0, Math.min(idx, rows.length - 1));
+      rows.forEach((tr, i) => {
+        const on = i === selectedRow;
+        tr.classList.toggle('bg-zinc-800', on);
+        if (on) tr.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (document.querySelector('dialog[open]')) return;
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'ArrowDown') {
+        if (!dataRows().length) return;
+        e.preventDefault();
+        setSelectedRow(selectedRow < 0 ? 0 : selectedRow + 1);
+      } else if (e.key === 'ArrowUp') {
+        if (!dataRows().length) return;
+        e.preventDefault();
+        setSelectedRow(selectedRow < 0 ? 0 : selectedRow - 1);
+      } else if (e.key === 'Enter' && selectedRow >= 0) {
+        const tr = dataRows()[selectedRow];
+        const btn = tr && tr.querySelector('[data-edit-pk]');
+        if (btn) { e.preventDefault(); openEditModal(decodeURIComponent(btn.dataset.editPk)); }
+      }
     });
 
     const modal = pkColumn ? document.getElementById('edit-modal') : null;

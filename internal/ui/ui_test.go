@@ -994,6 +994,32 @@ func TestLayoutRendersCommandPalette(t *testing.T) {
 	}
 }
 
+func TestTableViewRowKeyboardNavigation(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		// Rendered rows carry the data-row marker the nav selects over.
+		`<tr data-row class="hover:bg-zinc-900">`,
+		`tbody.querySelectorAll('tr[data-row]')`,
+		// Arrow keys move the highlight; Enter opens the selected row.
+		`if (e.key === 'ArrowDown') {`,
+		`openEditModal(decodeURIComponent(btn.dataset.editPk))`,
+		// Typing in a field must not be hijacked.
+		`if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("row keyboard navigation missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
 func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
 	t.Parallel()
 
