@@ -199,7 +199,7 @@ func (s *Server) schemaDiagram(w http.ResponseWriter, r *http.Request) {
 	s.renderLayout(w, r, layoutData{
 		Title:       "Schema — adms",
 		ContentTmpl: "content_erd.html",
-		ERD:         buildERD(s.schema.Tables),
+		ERD:         s.erd,
 	})
 }
 

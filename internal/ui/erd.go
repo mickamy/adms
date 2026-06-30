@@ -2,7 +2,9 @@ package ui
 
 import (
 	"math"
+	"slices"
 	"sort"
+	"unicode/utf8"
 
 	"github.com/mickamy/adms/internal/schema"
 )
@@ -83,8 +85,7 @@ func buildERD(tables []schema.Table) erdView {
 // erdNodes builds the node list (sorted by name for a stable order) and a
 // bare-name → index map for edge resolution.
 func erdNodes(tables []schema.Table) ([]erdNode, map[string]int) {
-	sorted := make([]schema.Table, len(tables))
-	copy(sorted, tables)
+	sorted := slices.Clone(tables)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 
 	nodes := make([]erdNode, 0, len(sorted))
@@ -131,10 +132,10 @@ func keyColumns(t schema.Table) []erdColumn {
 
 // sizeNode sets a node's box dimensions from its text content.
 func sizeNode(n *erdNode) {
-	widest := float64(len(n.Name))
+	widest := float64(utf8.RuneCountInString(n.Name))
 	for _, c := range n.Columns {
 		// +3 leaves room for the "PK"/"FK" marker the template appends.
-		if w := float64(len(c.Name) + 3); w > widest {
+		if w := float64(utf8.RuneCountInString(c.Name) + 3); w > widest {
 			widest = w
 		}
 	}

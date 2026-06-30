@@ -1114,6 +1114,39 @@ func TestSidebarLinksToSchemaDiagram(t *testing.T) {
 	}
 }
 
+func TestSchemaDiagramRendersSelfEdgeAsArc(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, schema.Schema{
+		Tables: []schema.Table{
+			{
+				Schema:     "public",
+				Name:       "node",
+				PrimaryKey: []string{"id"},
+				Columns:    []schema.Column{{Name: "id"}, {Name: "parent_id"}},
+				ForeignKeys: []schema.ForeignKey{
+					{Table: "public.node", Columns: []string{"parent_id"}, References: []string{"id"}},
+				},
+			},
+		},
+	})
+
+	resp := httpGet(t, ts.URL+"/schema")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	// A self-referencing FK is drawn as an arc <path>, not a straight line
+	// that would hide behind the box border.
+	if !strings.Contains(body, "<path d=") || !strings.Contains(body, "A 20 20 0 0 1") {
+		t.Errorf("self edge should render as an arc path\n---body---\n%s", body)
+	}
+
+	if strings.Contains(body, "<line ") {
+		t.Errorf("a self-only schema should draw no straight edge lines\n---body---\n%s", body)
+	}
+}
+
 func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
 	t.Parallel()
 

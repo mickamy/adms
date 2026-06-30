@@ -29,8 +29,13 @@
     </defs>
     <g id="erd-pan">
       {{range .Edges}}
+      {{if .Self}}
+      <path d="M {{.X1}} {{.Y1}} A 20 20 0 0 1 {{.X2}} {{.Y2}}" fill="none"
+        class="stroke-zinc-400 dark:stroke-zinc-600" stroke-width="1.5" marker-end="url(#erd-arrow)"></path>
+      {{else}}
       <line x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}"
         class="stroke-zinc-400 dark:stroke-zinc-600" stroke-width="1.5" marker-end="url(#erd-arrow)"></line>
+      {{end}}
       {{end}}
       {{range .Nodes}}
       {{$w := .W}}
@@ -88,6 +93,7 @@
     }, { passive: false });
 
     viewport.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // left button only; don't hijack right/middle clicks
       dragging = true; moved = false; sx = e.clientX - tx; sy = e.clientY - ty;
       viewport.classList.add('cursor-grabbing');
     });

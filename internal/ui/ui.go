@@ -35,6 +35,10 @@ type Server struct {
 	schema    schema.Schema
 	readOnly  bool
 	tmpl      *template.Template
+	// erd is laid out once at startup; the schema is fixed for the
+	// process lifetime, so there is no need to re-run the force
+	// simulation on every request.
+	erd erdView
 }
 
 // New constructs the UI server. apiOrigin is the URL the browser uses to
@@ -71,6 +75,7 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 		schema:    sch,
 		readOnly:  cfg.ReadOnly,
 		tmpl:      tmpl,
+		erd:       buildERD(sch.Tables),
 	}, nil
 }
 
