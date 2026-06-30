@@ -10,8 +10,7 @@ PostgREST-style HTTP API for PostgreSQL and MySQL, plus an optional bundled admi
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/mickamy?label=sponsor&logo=github)](https://github.com/sponsors/mickamy)
 
-> Status: the read / write API and the bundled admin UI both ship — see the [Roadmap](#roadmap). Remaining items are
-> UI polish (CSV / JSON export, keyboard shortcuts, ER diagram, full a11y pass).
+> Status: the read / write API and the bundled admin UI both ship, and the UI-polish roadmap (CSV / JSON export, keyboard shortcuts, a11y pass, schema ER diagram) is complete — see the [Roadmap](#roadmap).
 
 ## TL;DR
 
@@ -583,7 +582,7 @@ Working examples live in [`examples/adms.yaml`](examples/adms.yaml) and [`exampl
 - [x] CSV / JSON export of filtered query results
 - [x] Keyboard shortcuts (`Cmd/Ctrl+K` table palette, `↑↓` row navigation)
 - [x] a11y polish (skeleton loaders, explicit empty / error states, light-mode toggle)
-- [ ] Schema viewer ER diagram
+- [x] Schema viewer ER diagram
 
 ## Why not PostgREST?
 

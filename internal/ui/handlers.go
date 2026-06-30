@@ -23,6 +23,7 @@ type layoutData struct {
 	RowPK        string
 	OutgoingFKs  map[string]fkRef
 	ReferencedBy []fkRef
+	ERD          erdView
 }
 
 // fkRef is the half of a single-column foreign key the UI cares about:
@@ -191,6 +192,14 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 	s.renderLayout(w, r, layoutData{
 		Title:       "adms",
 		ContentTmpl: "content_index.html",
+	})
+}
+
+func (s *Server) schemaDiagram(w http.ResponseWriter, r *http.Request) {
+	s.renderLayout(w, r, layoutData{
+		Title:       "Schema — adms",
+		ContentTmpl: "content_erd.html",
+		ERD:         buildERD(s.schema.Tables),
 	})
 }
 

@@ -56,6 +56,9 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 		"bareTableName":        bareTableName,
 		"isReservedFilterName": isReservedFilterName,
 		"reservedFilterNames":  reservedFilterNames,
+		"add":                  func(a, b int) int { return a + b },
+		"sub":                  func(a, b float64) float64 { return a - b },
+		"mul":                  func(a, b int) int { return a * b },
 	}).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("ui: parse templates: %w", err)
@@ -140,6 +143,7 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("GET /__healthz", s.healthz)
 	mux.HandleFunc("GET /{$}", s.index)
+	mux.HandleFunc("GET /schema", s.schemaDiagram)
 	mux.HandleFunc("GET /t/{table}", s.tableView)
 	mux.HandleFunc("GET /t/{table}/schema", s.schemaView)
 	mux.HandleFunc("GET /t/{table}/new", s.newRow)

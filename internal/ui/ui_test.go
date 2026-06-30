@@ -1027,6 +1027,93 @@ func TestTableViewRowKeyboardNavigation(t *testing.T) {
 	}
 }
 
+func TestSchemaDiagramRendersNodesAndEdges(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/schema")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`id="erd-svg"`,
+		`>posts</text>`, // table-name labels in the SVG
+		`>users</text>`,
+		`>PK<`,                         // primary-key marker
+		`>FK<`,                         // foreign-key marker
+		`marker-end="url(#erd-arrow)"`, // edges carry the arrowhead
+		`href="/t/posts/schema"`,       // nodes link to their schema page
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("ERD missing %q\n---body---\n%s", want, body)
+		}
+	}
+
+	// Count the anchor attribute form only; the JS selector "[data-erd-node]"
+	// also contains the token.
+	if n := strings.Count(body, "data-erd-node>"); n != 2 {
+		t.Errorf("ERD node count = %d, want 2", n)
+	}
+
+	if n := strings.Count(body, "<line "); n != 1 {
+		t.Errorf("edge <line count = %d, want 1 (posts -> users)", n)
+	}
+}
+
+func TestSchemaDiagramIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	r1 := httpGet(t, ts.URL+"/schema")
+	b1 := readAll(t, r1)
+	_ = r1.Body.Close()
+
+	r2 := httpGet(t, ts.URL+"/schema")
+	b2 := readAll(t, r2)
+	_ = r2.Body.Close()
+
+	if b1 != b2 {
+		t.Error("ERD output changed between identical requests; the layout must be deterministic")
+	}
+}
+
+func TestSchemaDiagramEmpty(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, schema.Schema{})
+
+	resp := httpGet(t, ts.URL+"/schema")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	if !strings.Contains(body, "No tables to diagram.") {
+		t.Errorf("empty schema should show the ERD placeholder\n%s", body)
+	}
+
+	if strings.Contains(body, `id="erd-svg"`) {
+		t.Error("empty schema should not render an SVG canvas")
+	}
+}
+
+func TestSidebarLinksToSchemaDiagram(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	if !strings.Contains(body, `href="/schema"`) {
+		t.Errorf("sidebar should link to the schema diagram\n%s", body)
+	}
+}
+
 func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
 	t.Parallel()
 
