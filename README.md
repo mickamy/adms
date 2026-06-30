@@ -580,8 +580,8 @@ Working examples live in [`examples/adms.yaml`](examples/adms.yaml) and [`exampl
   HTML/CSS/JS embedded via `embed.FS`, SSR with `html/template` + minified Tailwind, CORS auto-configured, dark mode,
   type-aware form inputs, inline cell + modal edit, FK navigation, schema viewer, bearer-token forwarding, read-only
   gating
-- [ ] CSV / JSON export of filtered query results
-- [ ] Keyboard shortcuts (`Cmd/Ctrl+K` table palette, `↑↓` row navigation)
+- [x] CSV / JSON export of filtered query results
+- [x] Keyboard shortcuts (`Cmd/Ctrl+K` table palette, `↑↓` row navigation)
 - [ ] a11y polish (skeleton loaders, explicit empty / error states, light-mode toggle)
 - [ ] Schema viewer ER diagram
 
