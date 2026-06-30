@@ -987,6 +987,8 @@ func TestLayoutRendersCommandPalette(t *testing.T) {
 		`palette.showModal();`,
 		// The palette is built from the sidebar's table links.
 		`document.querySelectorAll('aside [data-table-name]')`,
+		// Options are native anchors so modifier-clicks open a new tab.
+		`<a role="option" id="cmd-opt-`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("command palette missing %q\n---body---\n%s", want, body)
@@ -1015,6 +1017,8 @@ func TestTableViewRowKeyboardNavigation(t *testing.T) {
 		`openEditModal(decodeURIComponent(btn.dataset.editPk))`,
 		// Typing in a field or activating a focused control must not be hijacked.
 		`if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A') return;`,
+		// Clicking a row syncs the selection so arrows continue from there.
+		`const tr = e.target.closest('tr[data-row]');`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("row keyboard navigation missing %q\n---body---\n%s", want, body)

@@ -161,12 +161,14 @@
         const needle = query.trim().toLowerCase();
         items = tables.filter((t) => t.name.toLowerCase().includes(needle));
         if (items.length) {
+          // Native <a> so middle-click / Cmd-click open a table in a new
+          // tab; tabindex="-1" keeps focus on the input (combobox model).
           results.innerHTML = items.map((t, i) =>
-            `<li role="option" id="cmd-opt-${i}" data-href="${escapeHTML(t.href)}"`
-            + ` class="px-3 py-1.5 cursor-pointer">${escapeHTML(t.name)}</li>`).join('');
+            `<a role="option" id="cmd-opt-${i}" href="${escapeHTML(t.href)}" tabindex="-1"`
+            + ` class="block px-3 py-1.5 cursor-pointer">${escapeHTML(t.name)}</a>`).join('');
           active = 0;
         } else {
-          results.innerHTML = '<li class="px-3 py-1.5 text-zinc-500">No tables.</li>';
+          results.innerHTML = '<li role="option" aria-disabled="true" class="px-3 py-1.5 text-zinc-500">No tables.</li>';
           active = -1;
         }
         syncActive();
@@ -188,6 +190,13 @@
 
       document.addEventListener('keydown', (e) => {
         if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+          // Ctrl+K is "kill line" in text fields on macOS / readline, so
+          // don't steal it while typing; Cmd+K (the macOS app shortcut)
+          // always opens.
+          if (e.ctrlKey && !e.metaKey) {
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          }
           e.preventDefault();
           open();
         }
@@ -201,10 +210,6 @@
           e.preventDefault();
           if (active >= 0 && items[active]) window.location.href = items[active].href;
         }
-      });
-      results.addEventListener('click', (e) => {
-        const li = e.target.closest('[data-href]');
-        if (li) window.location.href = li.dataset.href;
       });
       palette.addEventListener('click', (e) => { if (e.target === palette) palette.close(); });
     })();

@@ -404,6 +404,13 @@
       }
     });
 
+    // Keep mouse and keyboard in sync: clicking a row makes it the
+    // selection so a subsequent arrow key continues from there.
+    tbody.addEventListener('click', (e) => {
+      const tr = e.target.closest('tr[data-row]');
+      if (tr) setSelectedRow(Array.from(dataRows()).indexOf(tr));
+    });
+
     const modal = pkColumn ? document.getElementById('edit-modal') : null;
     const editForm = modal ? document.getElementById('edit-form') : null;
     const editStatus = modal ? document.getElementById('edit-status') : null;
