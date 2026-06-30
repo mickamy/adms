@@ -383,21 +383,22 @@
     }
 
     document.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
       if (document.querySelector('dialog[open]')) return;
       // Yield to focused interactive elements so tabbing to a button or
       // link and pressing Enter / arrows still activates them.
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A') return;
+      const rows = dataRows();
+      if (!rows.length) return;
       if (e.key === 'ArrowDown') {
-        if (!dataRows().length) return;
         e.preventDefault();
         setSelectedRow(selectedRow < 0 ? 0 : selectedRow + 1);
       } else if (e.key === 'ArrowUp') {
-        if (!dataRows().length) return;
         e.preventDefault();
-        setSelectedRow(selectedRow < 0 ? 0 : selectedRow - 1);
+        setSelectedRow(selectedRow < 0 ? rows.length - 1 : selectedRow - 1);
       } else if (e.key === 'Enter' && selectedRow >= 0) {
-        const tr = dataRows()[selectedRow];
+        const tr = rows[selectedRow];
         const btn = tr && tr.querySelector('[data-edit-pk]');
         if (btn) { e.preventDefault(); openEditModal(decodeURIComponent(btn.dataset.editPk)); }
       }

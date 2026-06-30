@@ -1010,6 +1010,8 @@ func TestTableViewRowKeyboardNavigation(t *testing.T) {
 		`tbody.querySelectorAll('tr[data-row]')`,
 		// Arrow keys move the highlight; Enter opens the selected row.
 		`if (e.key === 'ArrowDown') {`,
+		// ArrowUp from no selection wraps to the last row (list-nav convention).
+		`setSelectedRow(selectedRow < 0 ? rows.length - 1 : selectedRow - 1);`,
 		`openEditModal(decodeURIComponent(btn.dataset.editPk))`,
 		// Typing in a field or activating a focused control must not be hijacked.
 		`if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A') return;`,
