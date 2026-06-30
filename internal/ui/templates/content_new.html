@@ -13,7 +13,7 @@
   <div>
     <label class="block text-zinc-600 dark:text-zinc-400 text-sm mb-1">
       {{.Name}}
-      <span class="text-zinc-400 dark:text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
+      <span class="text-zinc-500 dark:text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
     </label>
     {{$kind := inputKind .}}
     {{if eq $kind "boolean"}}
