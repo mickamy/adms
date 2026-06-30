@@ -582,7 +582,7 @@ Working examples live in [`examples/adms.yaml`](examples/adms.yaml) and [`exampl
   gating
 - [x] CSV / JSON export of filtered query results
 - [x] Keyboard shortcuts (`Cmd/Ctrl+K` table palette, `↑↓` row navigation)
-- [ ] a11y polish (skeleton loaders, explicit empty / error states, light-mode toggle)
+- [x] a11y polish (skeleton loaders, explicit empty / error states, light-mode toggle)
 - [ ] Schema viewer ER diagram
 
 ## Why not PostgREST?

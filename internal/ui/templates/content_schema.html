@@ -5,14 +5,14 @@
     <h1 class="text-2xl font-semibold">{{.Name}}</h1>
     <p class="text-zinc-500 text-sm">{{.Schema}}{{if .PrimaryKey}} · PK: {{range $i, $col := .PrimaryKey}}{{if $i}}, {{end}}{{$col}}{{end}}{{end}} · schema</p>
   </div>
-  <a href="/t/{{.Name}}" class="text-sm text-zinc-400 hover:text-zinc-200">← Data</a>
+  <a href="/t/{{.Name}}" class="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200">← Data</a>
 </div>
 
 <section class="mb-8">
   <h2 class="text-sm uppercase tracking-wide text-zinc-500 mb-2">Columns</h2>
-  <div class="overflow-x-auto border border-zinc-800 rounded">
+  <div class="overflow-x-auto border border-zinc-200 dark:border-zinc-800 rounded">
     <table class="min-w-full text-sm">
-      <thead class="bg-zinc-900 text-zinc-400">
+      <thead class="bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400">
         <tr>
           <th class="px-3 py-2 text-left font-medium">name</th>
           <th class="px-3 py-2 text-left font-medium">type</th>
@@ -21,13 +21,13 @@
           <th class="px-3 py-2 text-left font-medium">notes</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-zinc-800">
+      <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
         {{range .Columns}}
         <tr>
           <td class="px-3 py-2 align-top whitespace-nowrap">{{.Name}}</td>
-          <td class="px-3 py-2 align-top text-zinc-400 whitespace-nowrap">{{.Type}}</td>
-          <td class="px-3 py-2 align-top text-zinc-400">{{if .Nullable}}yes{{else}}no{{end}}</td>
-          <td class="px-3 py-2 align-top text-zinc-400 font-mono text-xs">{{if .Default}}{{.Default}}{{else}}<span class="text-zinc-600">—</span>{{end}}</td>
+          <td class="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{.Type}}</td>
+          <td class="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400">{{if .Nullable}}yes{{else}}no{{end}}</td>
+          <td class="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400 font-mono text-xs">{{if .Default}}{{.Default}}{{else}}<span class="text-zinc-400 dark:text-zinc-600">—</span>{{end}}</td>
           <td class="px-3 py-2 align-top text-zinc-500 text-xs">
             {{if .IsGenerated}}<span class="mr-2">generated</span>{{end}}
             {{if .IsIdentity}}<span class="mr-2">identity</span>{{end}}
@@ -43,7 +43,7 @@
 {{if .PrimaryKey}}
 <section class="mb-8">
   <h2 class="text-sm uppercase tracking-wide text-zinc-500 mb-2">Primary key</h2>
-  <p class="text-sm text-zinc-300 font-mono">{{range $i, $col := .PrimaryKey}}{{if $i}}, {{end}}{{$col}}{{end}}</p>
+  <p class="text-sm text-zinc-700 dark:text-zinc-300 font-mono">{{range $i, $col := .PrimaryKey}}{{if $i}}, {{end}}{{$col}}{{end}}</p>
 </section>
 {{end}}
 
@@ -52,10 +52,10 @@
   <h2 class="text-sm uppercase tracking-wide text-zinc-500 mb-2">Foreign keys</h2>
   <ul class="text-sm space-y-1 font-mono">
     {{range .ForeignKeys}}
-    <li class="text-zinc-300">
+    <li class="text-zinc-700 dark:text-zinc-300">
       ({{range $i, $col := .Columns}}{{if $i}}, {{end}}{{$col}}{{end}})
       <span class="text-zinc-500 mx-1">→</span>
-      <a href="/t/{{bareTableName .Table}}/schema" class="text-zinc-100 hover:underline">{{.Table}}</a>({{range $i, $col := .References}}{{if $i}}, {{end}}{{$col}}{{end}})
+      <a href="/t/{{bareTableName .Table}}/schema" class="text-zinc-900 dark:text-zinc-100 hover:underline">{{.Table}}</a>({{range $i, $col := .References}}{{if $i}}, {{end}}{{$col}}{{end}})
     </li>
     {{end}}
   </ul>
@@ -67,8 +67,8 @@
   <h2 class="text-sm uppercase tracking-wide text-zinc-500 mb-2">Referenced by</h2>
   <ul class="text-sm space-y-1 font-mono">
     {{range .ReferencedBy}}
-    <li class="text-zinc-300">
-      <a href="/t/{{bareTableName .Table}}/schema" class="text-zinc-100 hover:underline">{{.Table}}</a>({{range $i, $col := .Columns}}{{if $i}}, {{end}}{{$col}}{{end}})
+    <li class="text-zinc-700 dark:text-zinc-300">
+      <a href="/t/{{bareTableName .Table}}/schema" class="text-zinc-900 dark:text-zinc-100 hover:underline">{{.Table}}</a>({{range $i, $col := .Columns}}{{if $i}}, {{end}}{{$col}}{{end}})
       <span class="text-zinc-500 mx-1">→</span>
       {{$.ContentTable.Schema}}.{{$.ContentTable.Name}}({{range $i, $col := .References}}{{if $i}}, {{end}}{{$col}}{{end}})
     </li>
@@ -82,7 +82,7 @@
   <h2 class="text-sm uppercase tracking-wide text-zinc-500 mb-2">Indexes</h2>
   <ul class="text-sm space-y-1 font-mono">
     {{range .Indexes}}
-    <li class="text-zinc-300">
+    <li class="text-zinc-700 dark:text-zinc-300">
       {{.Name}}
       ({{range $i, $col := .Columns}}{{if $i}}, {{end}}{{$col}}{{end}})
       {{if .Unique}}<span class="text-zinc-500 text-xs ml-2 font-sans">UNIQUE</span>{{end}}
