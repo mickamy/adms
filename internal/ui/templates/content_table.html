@@ -41,7 +41,7 @@
   <div>
     <label class="block text-zinc-500 text-xs mb-1">{{.Name}}=</label>
     {{if isReservedFilterName .Name}}
-    <p class="text-xs text-zinc-500 dark:text-zinc-600 italic px-2 py-1">column name is reserved — filter unavailable</p>
+    <p class="text-xs text-zinc-500 italic px-2 py-1">column name is reserved — filter unavailable</p>
     {{else}}
     <input name="{{.Name}}" data-filter-kind="{{inputKind .}}" placeholder="{{filterHint .}}"
       class="w-full px-2 py-1 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600">
@@ -54,7 +54,7 @@
   <table class="min-w-full text-sm">
     <thead class="bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400">
       <tr>
-        {{range .Columns}}<th data-col="{{.Name}}" class="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none">{{.Name}}<span class="text-zinc-500 dark:text-zinc-600 text-xs ml-1">{{.Type}}</span></th>{{end}}
+        {{range .Columns}}<th data-col="{{.Name}}" class="px-3 py-2 text-left font-medium whitespace-nowrap cursor-pointer select-none">{{.Name}}<span class="text-zinc-500 text-xs ml-1">{{.Type}}</span></th>{{end}}
         {{if and $.RowPKColumn (not $.ReadOnly)}}<th class="px-3 py-2 text-right font-medium">actions</th>{{end}}
       </tr>
     </thead>
@@ -85,7 +85,7 @@
     <div>
       <label class="block text-zinc-600 dark:text-zinc-400 text-sm mb-1">
         {{.Name}}
-        <span class="text-zinc-500 dark:text-zinc-600 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
+        <span class="text-zinc-500 text-xs ml-1">{{.Type}}{{if .Nullable}} · nullable{{end}}</span>
       </label>
       <div class="flex items-center gap-2">
         {{$kind := inputKind .}}
@@ -297,7 +297,7 @@
           const v = row[c];
           let cell;
           if (v === null || v === undefined) {
-            cell = '<span class="text-zinc-500 dark:text-zinc-600">null</span>';
+            cell = '<span class="text-zinc-500">null</span>';
           } else {
             const text = escapeHTML(typeof v === 'object' ? JSON.stringify(v) : v);
             const ref = outgoingFKs[c];

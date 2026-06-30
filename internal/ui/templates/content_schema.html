@@ -27,7 +27,7 @@
           <td class="px-3 py-2 align-top whitespace-nowrap">{{.Name}}</td>
           <td class="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{.Type}}</td>
           <td class="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400">{{if .Nullable}}yes{{else}}no{{end}}</td>
-          <td class="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400 font-mono text-xs">{{if .Default}}{{.Default}}{{else}}<span class="text-zinc-500 dark:text-zinc-600">—</span>{{end}}</td>
+          <td class="px-3 py-2 align-top text-zinc-600 dark:text-zinc-400 font-mono text-xs">{{if .Default}}{{.Default}}{{else}}<span class="text-zinc-500">—</span>{{end}}</td>
           <td class="px-3 py-2 align-top text-zinc-500 text-xs">
             {{if .IsGenerated}}<span class="mr-2">generated</span>{{end}}
             {{if .IsIdentity}}<span class="mr-2">identity</span>{{end}}
