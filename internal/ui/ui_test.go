@@ -968,6 +968,32 @@ func TestTableViewRendersExportControls(t *testing.T) {
 	}
 }
 
+func TestLayoutRendersCommandPalette(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestUIServer(t, sampleSchema())
+
+	resp := httpGet(t, ts.URL+"/t/users")
+	defer func() { _ = resp.Body.Close() }()
+
+	body := readAll(t, resp)
+
+	for _, want := range []string{
+		`id="cmd-palette"`,
+		`id="cmd-input"`,
+		`role="listbox"`,
+		// Cmd/Ctrl+K opens the palette.
+		`if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {`,
+		`palette.showModal();`,
+		// The palette is built from the sidebar's table links.
+		`document.querySelectorAll('aside [data-table-name]')`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("command palette missing %q\n---body---\n%s", want, body)
+		}
+	}
+}
+
 func TestTableViewFilterPlaceholdersAreKindAware(t *testing.T) {
 	t.Parallel()
 
