@@ -31,6 +31,9 @@ var (
 	BearerToken          = bearerToken
 	Cors                 = cors
 	NormalizeScanValue   = normalizeScanValue
+	WantsCSV             = wantsCSV
+	CSVCell              = csvCell
+	WriteCSV             = writeCSV
 	FilterAllowedTables  = filterAllowedTables
 	ParsePrefer          = parsePrefer
 	ContentRangeReturned = contentRangeReturned

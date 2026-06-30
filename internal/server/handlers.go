@@ -69,12 +69,24 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	result, err := rowsToJSON(rows, embedAliases)
+	cols, result, err := scanRows(rows, embedAliases)
 	if err != nil {
 		logger.Error(r.Context(), "encode rows",
 			"method", r.Method, "path", r.URL.EscapedPath(), "err", err.Error())
 		writeProblem(w, r, http.StatusInternalServerError,
 			"db-error", "Database error", "failed to read rows from the database")
+
+		return
+	}
+
+	if wantsCSV(r.Header.Get("Accept")) {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", tableName+".csv"))
+
+		if err := writeCSV(w, cols, result); err != nil {
+			logger.Error(r.Context(), "encode csv",
+				"method", r.Method, "path", r.URL.EscapedPath(), "err", err.Error())
+		}
 
 		return
 	}
@@ -86,10 +98,13 @@ func (s *Server) read(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error) {
+// scanRows materializes the result set into ordered column names plus a
+// slice of row maps. The column order is the SQL projection order, which
+// the CSV encoder relies on for a stable header row.
+func scanRows(rows *sql.Rows, embedAliases []string) ([]string, []map[string]any, error) {
 	cols, err := rows.Columns()
 	if err != nil {
-		return nil, fmt.Errorf("columns: %w", err)
+		return nil, nil, fmt.Errorf("columns: %w", err)
 	}
 
 	embedSet := make(map[string]struct{}, len(embedAliases))
@@ -109,7 +124,7 @@ func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error)
 
 	for rows.Next() {
 		if err := rows.Scan(ptrs...); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
+			return nil, nil, fmt.Errorf("scan: %w", err)
 		}
 
 		row := make(map[string]any, len(cols))
@@ -126,10 +141,10 @@ func rowsToJSON(rows *sql.Rows, embedAliases []string) ([]map[string]any, error)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate: %w", err)
+		return nil, nil, fmt.Errorf("iterate: %w", err)
 	}
 
-	return result, nil
+	return cols, result, nil
 }
 
 // decodeEmbedValue wraps the embed payload in a json.RawMessage so the

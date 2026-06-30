@@ -4,11 +4,13 @@ package server_test
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -280,4 +282,104 @@ func TestReadHandlerPostgres_Embed(t *testing.T) {
 			t.Errorf("row[0].author.name = %v, want %q", got, want)
 		}
 	})
+}
+
+func TestReadHandlerPostgres_CSV(t *testing.T) {
+	t.Parallel()
+
+	db, err := sql.Open("pgx", pgTestDSN())
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := t.Context()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatalf("ping: %v (is `docker compose up` running?)", err)
+	}
+
+	stmts := []string{
+		`DROP TABLE IF EXISTS csv_export`,
+		`CREATE TABLE csv_export (
+			id BIGINT PRIMARY KEY,
+			name TEXT NOT NULL
+		)`,
+		// A value with a comma and a quote exercises RFC 4180 escaping.
+		`INSERT INTO csv_export (id, name) VALUES
+			(1, 'alice'),
+			(2, 'bob, "the builder"')`,
+	}
+
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			t.Fatalf("fixture %q: %v", s, err)
+		}
+	}
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DROP TABLE IF EXISTS csv_export`)
+	})
+
+	srv, err := server.New(
+		config.Config{
+			Driver:         database.DriverPostgres,
+			Listen:         ":0",
+			Timeout:        30 * time.Second,
+			DefaultLimit:   100,
+			MaxLimit:       1000,
+			AllowedSchemas: []string{"public"},
+		},
+		db,
+	)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+
+	if err := srv.Prepare(ctx); err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		ts.URL+"/csv_export?order=id.asc", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "text/csv")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body = %s", resp.StatusCode, body)
+	}
+
+	if ct := resp.Header.Get("Content-Type"); ct != "text/csv; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want text/csv; charset=utf-8", ct)
+	}
+
+	if cd := resp.Header.Get("Content-Disposition"); cd != `attachment; filename="csv_export.csv"` {
+		t.Errorf("Content-Disposition = %q, want attachment; filename=\"csv_export.csv\"", cd)
+	}
+
+	got, err := csv.NewReader(resp.Body).ReadAll()
+	if err != nil {
+		t.Fatalf("parse csv: %v", err)
+	}
+
+	want := [][]string{
+		{"id", "name"},
+		{"1", "alice"},
+		{"2", `bob, "the builder"`},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CSV content mismatch:\ngot:  %#v\nwant: %#v", got, want)
+	}
 }
