@@ -384,8 +384,10 @@
 
     document.addEventListener('keydown', (e) => {
       if (document.querySelector('dialog[open]')) return;
+      // Yield to focused interactive elements so tabbing to a button or
+      // link and pressing Enter / arrows still activates them.
       const tag = (document.activeElement && document.activeElement.tagName) || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A') return;
       if (e.key === 'ArrowDown') {
         if (!dataRows().length) return;
         e.preventDefault();

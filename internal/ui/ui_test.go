@@ -1011,8 +1011,8 @@ func TestTableViewRowKeyboardNavigation(t *testing.T) {
 		// Arrow keys move the highlight; Enter opens the selected row.
 		`if (e.key === 'ArrowDown') {`,
 		`openEditModal(decodeURIComponent(btn.dataset.editPk))`,
-		// Typing in a field must not be hijacked.
-		`if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;`,
+		// Typing in a field or activating a focused control must not be hijacked.
+		`if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'A') return;`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("row keyboard navigation missing %q\n---body---\n%s", want, body)
