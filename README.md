@@ -436,7 +436,7 @@ interactive with vanilla `fetch` against the same HTTP API documented above.
 
 ### Design
 
-- **Light and dark themes** — follows your OS preference by default, with a toggle that is remembered per browser.
+- **Light and dark themes** — follow your OS preference by default, with a toggle that is remembered per browser.
 - **Responsive** down to tablet widths (>= 768px).
 - **Read-only gating** — when `read_only: true` the UI hides every write affordance (`+ New`, edit / delete buttons,
   inline-edit, modal, Save / Delete on row detail) and `/t/{table}/new` returns 404.
