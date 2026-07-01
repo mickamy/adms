@@ -17,6 +17,8 @@ PostgREST-style HTTP API for PostgreSQL and MySQL, plus an optional bundled admi
 Point `adms` at a database and you get two ways in: an HTTP API the frontend can call directly, and an optional
 browser-based admin UI hosted from the same binary. No service layer, no codegen, no schema duplicated in two places.
 
+![ui](assets/ui.png)
+
 ### As an HTTP API
 
 ```yaml
@@ -68,9 +70,10 @@ ADMS_DSN="postgres://postgres@localhost/myapp?sslmode=disable" adms
 # → open http://localhost:7778/
 ```
 
-You land on a dark-mode admin console with schema-grouped tables in the sidebar, sortable / filterable / pageable row
-views in the main pane, FK-aware embedded rows, inline editing, typed insert forms, and a built-in schema viewer. No
-`node_modules`, no separate deploy — the UI is embedded in the binary.
+You land on an admin console (light or dark, following your OS) with schema-grouped tables in the sidebar, sortable /
+filterable / pageable row views in the main pane, FK-aware embedded rows, inline editing, typed insert forms, CSV / JSON
+export, a built-in schema viewer, and a whole-schema ER diagram. No `node_modules`, no separate deploy — the UI is
+embedded in the binary.
 
 The same idea drives both surfaces: reads, writes, joins, ordering, paging, counting — all defined by your database
 schema.
@@ -94,7 +97,8 @@ MySQL** and **API + (optional) UI**, with no extra dependencies to install beyon
 
 ## Install
 
-Tagged releases are not out yet. Once `v0.1.0` ships:
+Prebuilt binaries for macOS, Linux, and Windows are attached to each
+[release](https://github.com/mickamy/adms/releases). Install via Homebrew or `go install`:
 
 ```sh
 # Homebrew (tap)
@@ -104,7 +108,7 @@ brew install mickamy/tap/adms
 go install github.com/mickamy/adms@latest
 ```
 
-While unreleased, build from source:
+Or build from source:
 
 ```sh
 git clone https://github.com/mickamy/adms
@@ -148,10 +152,7 @@ On boot, `adms` introspects the target database, builds an in-memory schema mode
 `ui.enabled: true`, a second listener on `:7778` (override with `ui.listen:`) also serves the bundled admin UI from
 the same process.
 
-> **Today (Phase 1.5):** `adms` connects, introspects, and prints a per-schema summary, then exits. The HTTP server,
-> health endpoint, and table resources described below land in Phase 2.
-
-Verify it works (Phase 2+):
+Verify it works:
 
 ```sh
 curl http://localhost:7777/                  # schema dump (JSON)
@@ -415,7 +416,10 @@ interactive with vanilla `fetch` against the same HTTP API documented above.
 
 - **Sidebar** — schema-grouped table list with incremental search.
 - **Table view** — row list with PostgREST-style filter inputs (kind-aware placeholders, bare values auto-prefixed with
-  the kind-default operator), column-header sort, paging, FK arrows that jump to the referenced row.
+  the kind-default operator), column-header sort, paging, FK arrows that jump to the referenced row, and CSV / JSON
+  export of the current filtered query.
+- **Keyboard** — `Cmd`/`Ctrl`+`K` opens a fuzzy table palette; `↑` / `↓` move the row selection and `Enter` opens the
+  highlighted row.
 - **Row detail** — type-aware inputs by column kind (`<select>` for booleans, `type="number"` / `type="date"`,
   `<textarea>` for JSON), outgoing FK link that live-updates as you edit, and a "Referenced by" section listing
   incoming relationships as filtered table views.
@@ -427,10 +431,12 @@ interactive with vanilla `fetch` against the same HTTP API documented above.
 - **Schema viewer** — at `/t/{table}/schema`: columns (name / type / nullable / default / generated-or-identity /
   comment), primary key, outgoing FKs, incoming FKs (Referenced by), and indexes (name, columns, UNIQUE, method,
   partial-index predicate). FK / Referenced-by entries link to the other table's schema page.
+- **Schema diagram** — at `/schema`: a force-directed ER diagram of every table and its foreign keys; drag to pan,
+  scroll to zoom, click a table to open its schema page.
 
 ### Design
 
-- **Dark mode** by default.
+- **Light and dark themes** — follows your OS preference by default, with a toggle that is remembered per browser.
 - **Responsive** down to tablet widths (>= 768px).
 - **Read-only gating** — when `read_only: true` the UI hides every write affordance (`+ New`, edit / delete buttons,
   inline-edit, modal, Save / Delete on row detail) and `/t/{table}/new` returns 404.
