@@ -71,7 +71,7 @@ func New(cfg config.Config, sch schema.Schema, apiOrigin string) (*Server, error
 	return &Server{
 		addr:      cfg.UI.Listen,
 		apiOrigin: apiOrigin,
-		authToken: cfg.AuthToken,
+		authToken: cfg.Auth.Token,
 		schema:    sch,
 		readOnly:  cfg.ReadOnly,
 		tmpl:      tmpl,

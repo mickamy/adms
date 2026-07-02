@@ -14,25 +14,34 @@ import (
 )
 
 type config struct {
-	Driver         string   `toml:"driver"          yaml:"driver"`
-	DSN            string   `toml:"dsn"             yaml:"dsn"`
-	Listen         string   `toml:"listen"          yaml:"listen"`
-	ReadOnly       bool     `toml:"read_only"       yaml:"read_only"`
-	AllowedSchemas []string `toml:"allowed_schemas" yaml:"allowed_schemas"`
-	AllowedTables  []string `toml:"allowed_tables"  yaml:"allowed_tables"`
-	Timeout        string   `toml:"timeout"         yaml:"timeout"`
-	UI             uiConfig `toml:"ui"              yaml:"ui"`
-	CORSOrigins    []string `toml:"cors_origins"    yaml:"cors_origins"`
-	AuthTokenEnv   string   `toml:"auth_token_env"  yaml:"auth_token_env"`
-	LogLevel       string   `toml:"log_level"       yaml:"log_level"`
-	DefaultLimit   *int     `toml:"default_limit"   yaml:"default_limit"`
-	MaxLimit       *int     `toml:"max_limit"       yaml:"max_limit"`
-	MaxBodyBytes   *int64   `toml:"max_body_bytes"  yaml:"max_body_bytes"`
+	Driver         string     `toml:"driver"          yaml:"driver"`
+	DSN            string     `toml:"dsn"             yaml:"dsn"`
+	Listen         string     `toml:"listen"          yaml:"listen"`
+	ReadOnly       bool       `toml:"read_only"       yaml:"read_only"`
+	AllowedSchemas []string   `toml:"allowed_schemas" yaml:"allowed_schemas"`
+	AllowedTables  []string   `toml:"allowed_tables"  yaml:"allowed_tables"`
+	Timeout        string     `toml:"timeout"         yaml:"timeout"`
+	UI             uiConfig   `toml:"ui"              yaml:"ui"`
+	CORSOrigins    []string   `toml:"cors_origins"    yaml:"cors_origins"`
+	Auth           authConfig `toml:"auth"            yaml:"auth"`
+	LogLevel       string     `toml:"log_level"       yaml:"log_level"`
+	DefaultLimit   *int       `toml:"default_limit"   yaml:"default_limit"`
+	MaxLimit       *int       `toml:"max_limit"       yaml:"max_limit"`
+	MaxBodyBytes   *int64     `toml:"max_body_bytes"  yaml:"max_body_bytes"`
 }
 
 type uiConfig struct {
 	Enabled bool   `toml:"enabled" yaml:"enabled"`
 	Listen  string `toml:"listen"  yaml:"listen"`
+}
+
+type authConfig struct {
+	Mode   string           `toml:"mode"   yaml:"mode"`
+	Static staticAuthConfig `toml:"static" yaml:"static"`
+}
+
+type staticAuthConfig struct {
+	TokenEnv string `toml:"token_env" yaml:"token_env"`
 }
 
 func loadFile(path string) (config, error) {
@@ -92,7 +101,8 @@ func expandEnv(c *config) {
 	c.DSN = os.ExpandEnv(c.DSN)
 	c.Listen = os.ExpandEnv(c.Listen)
 	c.Timeout = os.ExpandEnv(c.Timeout)
-	c.AuthTokenEnv = os.ExpandEnv(c.AuthTokenEnv)
+	c.Auth.Mode = os.ExpandEnv(c.Auth.Mode)
+	c.Auth.Static.TokenEnv = os.ExpandEnv(c.Auth.Static.TokenEnv)
 	c.LogLevel = os.ExpandEnv(c.LogLevel)
 	c.UI.Listen = os.ExpandEnv(c.UI.Listen)
 
@@ -117,7 +127,8 @@ func normalize(c *config) {
 	c.DSN = strings.TrimSpace(c.DSN)
 	c.Listen = strings.TrimSpace(c.Listen)
 	c.Timeout = strings.TrimSpace(c.Timeout)
-	c.AuthTokenEnv = strings.TrimSpace(c.AuthTokenEnv)
+	c.Auth.Mode = strings.TrimSpace(c.Auth.Mode)
+	c.Auth.Static.TokenEnv = strings.TrimSpace(c.Auth.Static.TokenEnv)
 	c.LogLevel = strings.TrimSpace(c.LogLevel)
 	c.UI.Listen = strings.TrimSpace(c.UI.Listen)
 

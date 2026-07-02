@@ -114,15 +114,15 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 	}, nil
 }
 
-// newAuthenticator selects the request authenticator from the config. An empty
-// AuthToken keeps the API fully open (noneAuth); a set token gates it behind
-// the shared Bearer token (staticTokenAuth).
+// newAuthenticator selects the request authenticator from the config. auth.mode
+// static gates the API behind the resolved shared Bearer token
+// (staticTokenAuth); any other mode keeps it fully open (noneAuth).
 func newAuthenticator(cfg config.Config) Authenticator {
-	if cfg.AuthToken == "" {
-		return noneAuth{}
+	if cfg.Auth.Mode == config.AuthModeStatic {
+		return newStaticTokenAuth(cfg.Auth.Token)
 	}
 
-	return newStaticTokenAuth(cfg.AuthToken)
+	return noneAuth{}
 }
 
 func (s *Server) Run(ctx context.Context) error {

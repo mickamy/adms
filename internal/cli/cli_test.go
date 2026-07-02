@@ -96,10 +96,11 @@ func TestRun_PreConnectionErrors(t *testing.T) {
 		},
 		{
 			// Env name is unique to this test so parallel runs cannot race on it.
-			name: "auth_token_env points to unset variable",
+			name: "auth static token_env points to unset variable",
 			args: func(t *testing.T) []string {
 				p := filepath.Join(t.TempDir(), "adms.yaml")
-				body := "driver: postgres\ndsn: x\nauth_token_env: ADMS_AUTH_TOKEN_NOT_SET_IN_CLI_TEST\n"
+				body := "driver: postgres\ndsn: x\n" +
+					"auth:\n  mode: static\n  static:\n    token_env: ADMS_AUTH_TOKEN_NOT_SET_IN_CLI_TEST\n"
 				if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 					t.Fatalf("write fixture: %v", err)
 				}
@@ -107,7 +108,7 @@ func TestRun_PreConnectionErrors(t *testing.T) {
 				return []string{p}
 			},
 			wantExit:   exit.Usage,
-			wantStderr: "auth_token_env",
+			wantStderr: "auth.static.token_env",
 		},
 	}
 
@@ -134,20 +135,20 @@ func TestRun_ResolvesAuthTokenFromEnv(t *testing.T) {
 	const envName = "ADMS_AUTH_TOKEN_RESOLVED_IN_CLI_TEST"
 
 	// DSN points to a closed TCP port so pingDB fails fast (exit.Error)
-	// after resolveAuthToken runs, without needing a real database.
+	// after resolveAuth runs, without needing a real database.
 	cases := []struct {
-		name             string
-		authTokenEnvLine string
-		setenv           func(t *testing.T)
+		name      string
+		authBlock string
+		setenv    func(t *testing.T)
 	}{
 		{
-			name:             "auth_token_env unset returns nil and run reaches ping",
-			authTokenEnvLine: "",
-			setenv:           func(*testing.T) {},
+			name:      "auth mode none needs no resolution and run reaches ping",
+			authBlock: "",
+			setenv:    func(*testing.T) {},
 		},
 		{
-			name:             "auth_token_env points to populated env",
-			authTokenEnvLine: "auth_token_env: " + envName + "\n",
+			name:      "auth static resolves token from populated env",
+			authBlock: "auth:\n  mode: static\n  static:\n    token_env: " + envName + "\n",
 			setenv: func(t *testing.T) {
 				t.Setenv(envName, "tk")
 			},
@@ -162,7 +163,7 @@ func TestRun_ResolvesAuthTokenFromEnv(t *testing.T) {
 
 			body := "driver: postgres\n" +
 				`dsn: "postgres://adms:adms@127.0.0.1:1/adms_test?sslmode=disable&connect_timeout=1"` + "\n" +
-				tc.authTokenEnvLine +
+				tc.authBlock +
 				"timeout: 1s\n"
 			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 				t.Fatalf("write fixture: %v", err)
@@ -175,8 +176,8 @@ func TestRun_ResolvesAuthTokenFromEnv(t *testing.T) {
 				t.Fatalf("exit = %d, want %d (stderr=%q)", code, exit.Error, stderr.String())
 			}
 
-			if strings.Contains(stderr.String(), "auth_token_env") {
-				t.Errorf("stderr = %q, want auth_token_env NOT to appear (resolution should have succeeded)",
+			if strings.Contains(stderr.String(), "token_env") {
+				t.Errorf("stderr = %q, want token_env NOT to appear (resolution should have succeeded)",
 					stderr.String())
 			}
 
