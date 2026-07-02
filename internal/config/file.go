@@ -38,10 +38,17 @@ type uiConfig struct {
 type authConfig struct {
 	Mode   string           `toml:"mode"   yaml:"mode"`
 	Static staticAuthConfig `toml:"static" yaml:"static"`
+	OIDC   oidcConfig       `toml:"oidc"   yaml:"oidc"`
 }
 
 type staticAuthConfig struct {
 	TokenEnv string `toml:"token_env" yaml:"token_env"`
+}
+
+type oidcConfig struct {
+	Issuer     string `toml:"issuer"      yaml:"issuer"`
+	Audience   string `toml:"audience"    yaml:"audience"`
+	RolesClaim string `toml:"roles_claim" yaml:"roles_claim"`
 }
 
 func loadFile(path string) (config, error) {
@@ -103,6 +110,9 @@ func expandEnv(c *config) {
 	c.Timeout = os.ExpandEnv(c.Timeout)
 	c.Auth.Mode = os.ExpandEnv(c.Auth.Mode)
 	c.Auth.Static.TokenEnv = os.ExpandEnv(c.Auth.Static.TokenEnv)
+	c.Auth.OIDC.Issuer = os.ExpandEnv(c.Auth.OIDC.Issuer)
+	c.Auth.OIDC.Audience = os.ExpandEnv(c.Auth.OIDC.Audience)
+	c.Auth.OIDC.RolesClaim = os.ExpandEnv(c.Auth.OIDC.RolesClaim)
 	c.LogLevel = os.ExpandEnv(c.LogLevel)
 	c.UI.Listen = os.ExpandEnv(c.UI.Listen)
 
@@ -129,6 +139,9 @@ func normalize(c *config) {
 	c.Timeout = strings.TrimSpace(c.Timeout)
 	c.Auth.Mode = strings.TrimSpace(c.Auth.Mode)
 	c.Auth.Static.TokenEnv = strings.TrimSpace(c.Auth.Static.TokenEnv)
+	c.Auth.OIDC.Issuer = strings.TrimSpace(c.Auth.OIDC.Issuer)
+	c.Auth.OIDC.Audience = strings.TrimSpace(c.Auth.OIDC.Audience)
+	c.Auth.OIDC.RolesClaim = strings.TrimSpace(c.Auth.OIDC.RolesClaim)
 	c.LogLevel = strings.TrimSpace(c.LogLevel)
 	c.UI.Listen = strings.TrimSpace(c.UI.Listen)
 

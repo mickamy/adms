@@ -47,6 +47,7 @@ type AuthMode string
 const (
 	AuthModeNone   AuthMode = "none"
 	AuthModeStatic AuthMode = "static"
+	AuthModeOIDC   AuthMode = "oidc"
 )
 
 // Auth holds the resolved authentication settings. Token is populated by the
@@ -56,6 +57,16 @@ type Auth struct {
 	Mode     AuthMode
 	TokenEnv string
 	Token    string
+	OIDC     OIDC
+}
+
+// OIDC holds the settings for validating OIDC/JWT bearer tokens. The JWKS is
+// fetched from the issuer's discovery document, so no key material lives in the
+// config.
+type OIDC struct {
+	Issuer     string
+	Audience   string
+	RolesClaim string
 }
 
 func Load(path string) (Config, error) {
@@ -189,16 +200,34 @@ func buildAuth(a authConfig) (Auth, error) {
 	}
 
 	switch mode {
-	case AuthModeNone, AuthModeStatic:
+	case AuthModeNone, AuthModeStatic, AuthModeOIDC:
 	default:
-		return Auth{}, fmt.Errorf("invalid auth.mode %q (want none or static)", a.Mode)
+		return Auth{}, fmt.Errorf("invalid auth.mode %q (want none, static, or oidc)", a.Mode)
 	}
 
 	if mode == AuthModeStatic && a.Static.TokenEnv == "" {
 		return Auth{}, errors.New("auth.static.token_env is required when auth.mode is static")
 	}
 
-	return Auth{Mode: mode, TokenEnv: a.Static.TokenEnv}, nil
+	if mode == AuthModeOIDC {
+		if a.OIDC.Issuer == "" {
+			return Auth{}, errors.New("auth.oidc.issuer is required when auth.mode is oidc")
+		}
+
+		if a.OIDC.Audience == "" {
+			return Auth{}, errors.New("auth.oidc.audience is required when auth.mode is oidc")
+		}
+	}
+
+	return Auth{
+		Mode:     mode,
+		TokenEnv: a.Static.TokenEnv,
+		OIDC: OIDC{
+			Issuer:     a.OIDC.Issuer,
+			Audience:   a.OIDC.Audience,
+			RolesClaim: a.OIDC.RolesClaim,
+		},
+	}, nil
 }
 
 func parseDriver(s string) (database.Driver, error) {

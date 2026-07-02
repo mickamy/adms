@@ -29,6 +29,8 @@ var (
 	Logging              = logging
 	Authenticate         = authenticate
 	NewStaticTokenAuth   = newStaticTokenAuth
+	NewOIDCAuth          = newOIDCAuth
+	ExtractRoles         = extractRoles
 	BearerToken          = bearerToken
 	PrincipalFrom        = principalFrom
 	Cors                 = cors

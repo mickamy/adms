@@ -11,14 +11,18 @@ cors_origins = []
 
 log_level = "info"
 
-# Authentication. mode defaults to "none" (fully open). Set mode to "static"
-# and point static.token_env at an env var holding the bearer token to require
-# it. When ui.enabled is true, the UI auto-forwards the resolved token to its
-# browser fetches via a meta tag.
+# Authentication. mode defaults to "none" (fully open).
+#   static: point static.token_env at an env var holding a shared bearer token.
+#           When ui.enabled is true, the UI auto-forwards the resolved token.
+#   oidc:   validate JWTs against the issuer's JWKS (audience / expiry / signature).
 [auth]
 mode = "none"
 # [auth.static]
 # token_env = "ADMS_TOKEN"
+# [auth.oidc]
+# issuer = "https://your-tenant.auth0.com/"
+# audience = "adms"
+# roles_claim = "https://adms/roles"
 
 [ui]
 enabled = true

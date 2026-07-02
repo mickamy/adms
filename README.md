@@ -495,8 +495,27 @@ auth:
 With `auth.mode: static`, `adms` reads the bearer token from the env var named by `static.token_env` and requires
 every request to include `Authorization: Bearer <token>`. The admin UI carries the token automatically (the resolved
 value is exposed via a meta tag that an inline fetch wrapper picks up and attaches to every API-origin request). This
-is intentionally simple — for OIDC / JWT, terminate auth at your gateway. The token value itself never appears in the
-config file, so it does not leak into version control. `auth.mode` defaults to `none`, which leaves the API open.
+is intentionally simple — a single shared secret. The token value itself never appears in the config file, so it does
+not leak into version control. `auth.mode` defaults to `none`, which leaves the API open.
+
+### OIDC / JWT
+
+```yaml
+auth:
+  mode: oidc
+  oidc:
+    issuer: https://your-tenant.auth0.com/
+    audience: adms
+    roles_claim: https://adms/roles   # optional
+```
+
+With `auth.mode: oidc`, `adms` validates the `Authorization: Bearer <jwt>` on every request against the issuer's
+published keys. The JWKS is fetched from the issuer's OIDC discovery document at startup and refreshed automatically on
+key rotation, so no key material lives in the config. The signature, issuer, audience, and expiry are all checked; a
+token that fails any of them is rejected with `401`. `roles_claim` names the claim carrying the caller's roles (a JSON
+array or a space-separated string); it is surfaced on the request principal for future role-based authorization. An
+unreachable issuer fails startup rather than silently serving an open API. adms itself has no login flow — obtain
+tokens from your identity provider (Auth0, Cognito, Keycloak, …) and present them as bearer tokens.
 
 ### CORS
 
@@ -544,21 +563,24 @@ dsn: "${ADMS_DSN}"
 
 The full set of fields, with defaults and meaning:
 
-| Field                   | Default            | Description                                                   |
-|-------------------------|--------------------|---------------------------------------------------------------|
-| `driver`                | _(required)_       | `postgres` or `mysql`                                         |
-| `dsn`                   | _(required)_       | Database connection string (prefer `${VAR}` expansion)        |
-| `listen`                | `:7777`            | API listen address                                            |
-| `read_only`             | `false`            | Reject all write methods with `403`                           |
-| `allowed_schemas`       | _(driver default)_ | Schemas to introspect                                         |
-| `allowed_tables`        | _(all)_            | Table allowlist (empty means every introspected table)        |
-| `timeout`               | `30s`              | Startup operation timeout (DSN parsing, introspect, etc.)     |
-| `cors_origins`          | _(none)_           | Allowed origins for CORS                                      |
-| `auth.mode`             | `none`             | `none` (open) or `static` (require a bearer token)            |
-| `auth.static.token_env` | _(none)_           | Name of the env var holding the bearer token (`mode: static`) |
-| `log_level`             | `info`             | `debug` / `info` / `warn` / `error`                           |
-| `ui.enabled`            | `false`            | Mount the bundled admin UI                                    |
-| `ui.listen`             | `:7778`            | Listen address for the admin UI                               |
+| Field                   | Default            | Description                                                    |
+|-------------------------|--------------------|----------------------------------------------------------------|
+| `driver`                | _(required)_       | `postgres` or `mysql`                                          |
+| `dsn`                   | _(required)_       | Database connection string (prefer `${VAR}` expansion)         |
+| `listen`                | `:7777`            | API listen address                                             |
+| `read_only`             | `false`            | Reject all write methods with `403`                            |
+| `allowed_schemas`       | _(driver default)_ | Schemas to introspect                                          |
+| `allowed_tables`        | _(all)_            | Table allowlist (empty means every introspected table)         |
+| `timeout`               | `30s`              | Startup operation timeout (DSN parsing, introspect, etc.)      |
+| `cors_origins`          | _(none)_           | Allowed origins for CORS                                       |
+| `auth.mode`             | `none`             | `none` (open), `static` (shared bearer token), or `oidc` (JWT) |
+| `auth.static.token_env` | _(none)_           | Name of the env var holding the bearer token (`mode: static`)  |
+| `auth.oidc.issuer`      | _(none)_           | OIDC issuer URL for discovery / JWKS (`mode: oidc`)            |
+| `auth.oidc.audience`    | _(none)_           | Expected `aud` claim (`mode: oidc`)                            |
+| `auth.oidc.roles_claim` | _(none)_           | Claim carrying the caller's roles (`mode: oidc`, optional)     |
+| `log_level`             | `info`             | `debug` / `info` / `warn` / `error`                            |
+| `ui.enabled`            | `false`            | Mount the bundled admin UI                                     |
+| `ui.listen`             | `:7778`            | Listen address for the admin UI                                |
 
 TOML works the same way:
 

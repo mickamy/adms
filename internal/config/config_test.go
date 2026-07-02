@@ -428,6 +428,54 @@ auth:
 			},
 		},
 		{
+			name:     "auth mode oidc requires issuer",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: oidc`,
+			wantErr: "auth.oidc.issuer is required",
+		},
+		{
+			name:     "auth mode oidc requires audience",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: oidc
+  oidc:
+    issuer: https://issuer.example.com/`,
+			wantErr: "auth.oidc.audience is required",
+		},
+		{
+			name:     "auth mode oidc full parses",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: oidc
+  oidc:
+    issuer: https://issuer.example.com/
+    audience: adms
+    roles_claim: https://adms/roles`,
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      "x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+				Auth: config.Auth{
+					Mode: config.AuthModeOIDC,
+					OIDC: config.OIDC{
+						Issuer:     "https://issuer.example.com/",
+						Audience:   "adms",
+						RolesClaim: "https://adms/roles",
+					},
+				},
+			},
+		},
+		{
 			name:     "whitespace around scalar string fields is normalized",
 			filename: "adms.yaml",
 			body: `driver: "  postgres  "
