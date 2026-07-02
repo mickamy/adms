@@ -30,7 +30,7 @@ type Server struct {
 	maxLimit       int
 	maxBodyBytes   int64
 	readOnly       bool
-	authToken      string
+	authenticator  Authenticator
 	corsOrigins    []string
 	timeout        time.Duration
 
@@ -108,10 +108,21 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 		maxLimit:       cfg.MaxLimit,
 		maxBodyBytes:   maxBodyBytes,
 		readOnly:       cfg.ReadOnly,
-		authToken:      cfg.AuthToken,
+		authenticator:  newAuthenticator(cfg),
 		corsOrigins:    cfg.CORSOrigins,
 		timeout:        cfg.Timeout,
 	}, nil
+}
+
+// newAuthenticator selects the request authenticator from the config. An empty
+// AuthToken keeps the API fully open (noneAuth); a set token gates it behind
+// the shared Bearer token (staticTokenAuth).
+func newAuthenticator(cfg config.Config) Authenticator {
+	if cfg.AuthToken == "" {
+		return noneAuth{}
+	}
+
+	return newStaticTokenAuth(cfg.AuthToken)
 }
 
 func (s *Server) Run(ctx context.Context) error {
