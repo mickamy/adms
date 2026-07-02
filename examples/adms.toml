@@ -9,12 +9,20 @@ allowed_tables = []
 
 cors_origins = []
 
-# Name of an env var holding the bearer token; an empty string disables
-# bearer auth. When ui.enabled is true, the UI auto-forwards the resolved
-# token to its browser fetches via a meta tag.
-auth_token_env = ""
-
 log_level = "info"
+
+# Authentication. mode defaults to "none" (fully open).
+#   static: point static.token_env at an env var holding a shared bearer token.
+#           When ui.enabled is true, the UI auto-forwards the resolved token.
+#   oidc:   validate JWTs against the issuer's JWKS (audience / expiry / signature).
+[auth]
+mode = "none"
+# [auth.static]
+# token_env = "ADMS_TOKEN"
+# [auth.oidc]
+# issuer = "https://your-tenant.auth0.com/"
+# audience = "adms"
+# roles_claim = "https://adms/roles"
 
 [ui]
 enabled = true

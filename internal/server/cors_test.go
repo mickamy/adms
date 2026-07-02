@@ -269,7 +269,7 @@ func TestServerAppliesCORSOrigins(t *testing.T) {
 			Timeout:      time.Second,
 			DefaultLimit: 100,
 			MaxLimit:     1000,
-			AuthToken:    token,
+			Auth:         config.Auth{Mode: config.AuthModeStatic, Token: token},
 			CORSOrigins:  []string{corsTestOrigin},
 		},
 		stubDB,

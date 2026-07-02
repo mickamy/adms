@@ -29,8 +29,7 @@ type Config struct {
 	Timeout        time.Duration
 	UI             UIConfig
 	CORSOrigins    []string
-	AuthTokenEnv   string
-	AuthToken      string // Resolved at runtime from AuthTokenEnv by the cli; empty disables bearer auth.
+	Auth           Auth
 	LogLevel       string
 	DefaultLimit   int
 	MaxLimit       int
@@ -40,6 +39,34 @@ type Config struct {
 type UIConfig struct {
 	Enabled bool
 	Listen  string
+}
+
+// AuthMode selects how the server authenticates requests.
+type AuthMode string
+
+const (
+	AuthModeNone   AuthMode = "none"
+	AuthModeStatic AuthMode = "static"
+	AuthModeOIDC   AuthMode = "oidc"
+)
+
+// Auth holds the resolved authentication settings. Token is populated by the
+// cli from the TokenEnv environment variable when Mode is static, and is empty
+// otherwise.
+type Auth struct {
+	Mode     AuthMode
+	TokenEnv string
+	Token    string
+	OIDC     OIDC
+}
+
+// OIDC holds the settings for validating OIDC/JWT bearer tokens. The JWKS is
+// fetched from the issuer's discovery document, so no key material lives in the
+// config.
+type OIDC struct {
+	Issuer     string
+	Audience   string
+	RolesClaim string
 }
 
 func Load(path string) (Config, error) {
@@ -137,6 +164,11 @@ func buildConfig(c config) (Config, error) {
 		return Config{}, fmt.Errorf("invalid max_body_bytes %d: must be positive", maxBodyBytes)
 	}
 
+	auth, err := buildAuth(c.Auth)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Driver:         drv,
 		DSN:            c.DSN,
@@ -150,11 +182,51 @@ func buildConfig(c config) (Config, error) {
 			Listen:  uiListen,
 		},
 		CORSOrigins:  c.CORSOrigins,
-		AuthTokenEnv: c.AuthTokenEnv,
+		Auth:         auth,
 		LogLevel:     logLevel,
 		DefaultLimit: defaultLimit,
 		MaxLimit:     maxLimit,
 		MaxBodyBytes: maxBodyBytes,
+	}, nil
+}
+
+// buildAuth validates the auth block and returns the resolved settings. The
+// static token itself is not read here; the cli resolves TokenEnv into Token
+// at startup so the token value never lives in the config file.
+func buildAuth(a authConfig) (Auth, error) {
+	mode := AuthMode(strings.ToLower(a.Mode))
+	if a.Mode == "" {
+		mode = AuthModeNone
+	}
+
+	switch mode {
+	case AuthModeNone, AuthModeStatic, AuthModeOIDC:
+	default:
+		return Auth{}, fmt.Errorf("invalid auth.mode %q (want none, static, or oidc)", a.Mode)
+	}
+
+	if mode == AuthModeStatic && a.Static.TokenEnv == "" {
+		return Auth{}, errors.New("auth.static.token_env is required when auth.mode is static")
+	}
+
+	if mode == AuthModeOIDC {
+		if a.OIDC.Issuer == "" {
+			return Auth{}, errors.New("auth.oidc.issuer is required when auth.mode is oidc")
+		}
+
+		if a.OIDC.Audience == "" {
+			return Auth{}, errors.New("auth.oidc.audience is required when auth.mode is oidc")
+		}
+	}
+
+	return Auth{
+		Mode:     mode,
+		TokenEnv: a.Static.TokenEnv,
+		OIDC: OIDC{
+			Issuer:     a.OIDC.Issuer,
+			Audience:   a.OIDC.Audience,
+			RolesClaim: a.OIDC.RolesClaim,
+		},
 	}, nil
 }
 

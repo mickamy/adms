@@ -49,7 +49,10 @@ allowed_schemas: [public, internal]
 allowed_tables: [users, posts]
 timeout: 1m
 cors_origins: ["http://localhost:3000"]
-auth_token_env: ADMS_TOKEN
+auth:
+  mode: static
+  static:
+    token_env: ADMS_TOKEN
 log_level: debug
 ui:
   enabled: true
@@ -63,7 +66,7 @@ ui:
 				AllowedTables:  []string{"users", "posts"},
 				Timeout:        time.Minute,
 				CORSOrigins:    []string{"http://localhost:3000"},
-				AuthTokenEnv:   "ADMS_TOKEN",
+				Auth:           config.Auth{Mode: config.AuthModeStatic, TokenEnv: "ADMS_TOKEN"},
 				LogLevel:       "debug",
 				UI:             config.UIConfig{Enabled: true, Listen: ":9000"},
 			},
@@ -388,6 +391,91 @@ log_level: verbose`,
 			wantErr: `invalid log_level "verbose"`,
 		},
 		{
+			name:     "auth mode static requires token_env",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: static`,
+			wantErr: "auth.static.token_env is required",
+		},
+		{
+			name:     "invalid auth mode rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: bogus`,
+			wantErr: `invalid auth.mode "bogus"`,
+		},
+		{
+			name:     "auth mode is normalized to lower case",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: STATIC
+  static:
+    token_env: ADMS_TOKEN`,
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      "x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+				Auth:     config.Auth{Mode: config.AuthModeStatic, TokenEnv: "ADMS_TOKEN"},
+			},
+		},
+		{
+			name:     "auth mode oidc requires issuer",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: oidc`,
+			wantErr: "auth.oidc.issuer is required",
+		},
+		{
+			name:     "auth mode oidc requires audience",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: oidc
+  oidc:
+    issuer: https://issuer.example.com/`,
+			wantErr: "auth.oidc.audience is required",
+		},
+		{
+			name:     "auth mode oidc full parses",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: oidc
+  oidc:
+    issuer: https://issuer.example.com/
+    audience: adms
+    roles_claim: https://adms/roles`,
+			want: config.Config{
+				Driver:   database.DriverPostgres,
+				DSN:      "x",
+				Listen:   config.DefaultListen,
+				Timeout:  config.DefaultTimeout,
+				LogLevel: config.DefaultLogLevel,
+				UI:       config.UIConfig{Listen: config.DefaultUIListen},
+				Auth: config.Auth{
+					Mode: config.AuthModeOIDC,
+					OIDC: config.OIDC{
+						Issuer:     "https://issuer.example.com/",
+						Audience:   "adms",
+						RolesClaim: "https://adms/roles",
+					},
+				},
+			},
+		},
+		{
 			name:     "whitespace around scalar string fields is normalized",
 			filename: "adms.yaml",
 			body: `driver: "  postgres  "
@@ -709,8 +797,13 @@ func assertConfigEqual(t *testing.T, got, want config.Config) {
 		t.Errorf("CORSOrigins = %v, want %v", got.CORSOrigins, want.CORSOrigins)
 	}
 
-	if got.AuthTokenEnv != want.AuthTokenEnv {
-		t.Errorf("AuthTokenEnv = %q, want %q", got.AuthTokenEnv, want.AuthTokenEnv)
+	wantAuth := want.Auth
+	if wantAuth.Mode == "" {
+		wantAuth.Mode = config.AuthModeNone
+	}
+
+	if got.Auth != wantAuth {
+		t.Errorf("Auth = %+v, want %+v", got.Auth, wantAuth)
 	}
 
 	if got.LogLevel != want.LogLevel {

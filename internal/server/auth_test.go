@@ -12,14 +12,26 @@ import (
 	"github.com/mickamy/adms/internal/server"
 )
 
-func TestAuthBearer_EmptyTokenIsNoOp(t *testing.T) {
+// authMiddleware builds the authenticate middleware the way the server wires
+// it: an empty token stays fully open (noneAuth), a set token gates behind the
+// shared Bearer token (staticTokenAuth). The migration from the old authBearer
+// helper must not change any of these HTTP behaviors.
+func authMiddleware(token string, next http.Handler) http.Handler {
+	if token == "" {
+		return server.Authenticate(server.NoneAuth{}, next)
+	}
+
+	return server.Authenticate(server.NewStaticTokenAuth(token), next)
+}
+
+func TestAuthenticate_NoneAuthAllowsAllRequests(t *testing.T) {
 	t.Parallel()
 
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok")
 	})
 
-	ts := httptest.NewServer(server.AuthBearer("", ok))
+	ts := httptest.NewServer(authMiddleware("", ok))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -35,7 +47,7 @@ func TestAuthBearer_EmptyTokenIsNoOp(t *testing.T) {
 	}
 }
 
-func TestAuthBearer_AcceptsValidToken(t *testing.T) {
+func TestAuthenticate_AcceptsValidToken(t *testing.T) {
 	t.Parallel()
 
 	const token = "s3cret"
@@ -47,7 +59,7 @@ func TestAuthBearer_AcceptsValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	ts := httptest.NewServer(server.AuthBearer(token, next))
+	ts := httptest.NewServer(authMiddleware(token, next))
 	t.Cleanup(ts.Close)
 
 	req := newRequest(t, ts.URL+"/")
@@ -69,14 +81,14 @@ func TestAuthBearer_AcceptsValidToken(t *testing.T) {
 	}
 }
 
-func TestAuthBearer_LowercaseSchemeAccepted(t *testing.T) {
+func TestAuthenticate_LowercaseSchemeAccepted(t *testing.T) {
 	t.Parallel()
 
 	const token = "s3cret"
 
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	ts := httptest.NewServer(server.AuthBearer(token, ok))
+	ts := httptest.NewServer(authMiddleware(token, ok))
 	t.Cleanup(ts.Close)
 
 	req := newRequest(t, ts.URL+"/")
@@ -94,14 +106,14 @@ func TestAuthBearer_LowercaseSchemeAccepted(t *testing.T) {
 	}
 }
 
-func TestAuthBearer_RejectsMissingHeader(t *testing.T) {
+func TestAuthenticate_RejectsMissingHeader(t *testing.T) {
 	t.Parallel()
 
 	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("next handler should not be invoked without credentials")
 	})
 
-	ts := httptest.NewServer(server.AuthBearer("s3cret", next))
+	ts := httptest.NewServer(authMiddleware("s3cret", next))
 	t.Cleanup(ts.Close)
 
 	resp := httpGet(t, ts.URL+"/")
@@ -118,14 +130,14 @@ func TestAuthBearer_RejectsMissingHeader(t *testing.T) {
 	assertProblemJSON(t, resp, "unauthenticated", http.StatusUnauthorized)
 }
 
-func TestAuthBearer_RejectsWrongToken(t *testing.T) {
+func TestAuthenticate_RejectsWrongToken(t *testing.T) {
 	t.Parallel()
 
 	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("next handler should not be invoked with bad token")
 	})
 
-	ts := httptest.NewServer(server.AuthBearer("s3cret", next))
+	ts := httptest.NewServer(authMiddleware("s3cret", next))
 	t.Cleanup(ts.Close)
 
 	req := newRequest(t, ts.URL+"/")
@@ -149,7 +161,7 @@ func TestAuthBearer_RejectsWrongToken(t *testing.T) {
 	assertProblemJSON(t, resp, "unauthenticated", http.StatusUnauthorized)
 }
 
-func TestAuthBearer_RejectsWrongScheme(t *testing.T) {
+func TestAuthenticate_RejectsWrongScheme(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -170,7 +182,7 @@ func TestAuthBearer_RejectsWrongScheme(t *testing.T) {
 				t.Error("next handler should not be invoked for malformed Authorization header")
 			})
 
-			ts := httptest.NewServer(server.AuthBearer("s3cret", next))
+			ts := httptest.NewServer(authMiddleware("s3cret", next))
 			t.Cleanup(ts.Close)
 
 			req := newRequest(t, ts.URL+"/")
@@ -196,7 +208,7 @@ func TestAuthBearer_RejectsWrongScheme(t *testing.T) {
 	}
 }
 
-func TestAuthBearer_HealthzBypassesAuth(t *testing.T) {
+func TestAuthenticate_HealthzBypassesAuth(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -218,7 +230,7 @@ func TestAuthBearer_HealthzBypassesAuth(t *testing.T) {
 				_, _ = io.WriteString(w, "ok")
 			})
 
-			ts := httptest.NewServer(server.AuthBearer("s3cret", next))
+			ts := httptest.NewServer(authMiddleware("s3cret", next))
 			t.Cleanup(ts.Close)
 
 			resp := httpGet(t, ts.URL+tc.path) // no Authorization header
@@ -230,6 +242,55 @@ func TestAuthBearer_HealthzBypassesAuth(t *testing.T) {
 
 			if !called.Load() {
 				t.Errorf("%s did not reach the next handler", tc.path)
+			}
+		})
+	}
+}
+
+func TestAuthenticate_StoresPrincipalInContext(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		token       string
+		authHeader  string
+		wantSubject string
+	}{
+		{"none auth is anonymous", "", "", ""},
+		{"static token subject", "s3cret", "Bearer s3cret", "static-token"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got server.Principal
+			var found bool
+			next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				got, found = server.PrincipalFrom(r.Context())
+			})
+
+			ts := httptest.NewServer(authMiddleware(tc.token, next))
+			t.Cleanup(ts.Close)
+
+			req := newRequest(t, ts.URL+"/")
+			if tc.authHeader != "" {
+				req.Header.Set("Authorization", tc.authHeader)
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("do: %v", err)
+			}
+
+			defer func() { _ = resp.Body.Close() }()
+
+			if !found {
+				t.Fatal("PrincipalFrom returned ok=false, want a Principal in context")
+			}
+
+			if got.Subject != tc.wantSubject {
+				t.Errorf("Principal.Subject = %q, want %q", got.Subject, tc.wantSubject)
 			}
 		})
 	}

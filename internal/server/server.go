@@ -30,7 +30,7 @@ type Server struct {
 	maxLimit       int
 	maxBodyBytes   int64
 	readOnly       bool
-	authToken      string
+	authenticator  Authenticator
 	corsOrigins    []string
 	timeout        time.Duration
 
@@ -97,6 +97,11 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 		return nil, fmt.Errorf("server: %w", err)
 	}
 
+	auth, err := newAuthenticator(cfg.Auth)
+	if err != nil {
+		return nil, fmt.Errorf("server: %w", err)
+	}
+
 	return &Server{
 		addr:           cfg.Listen,
 		db:             db,
@@ -108,10 +113,31 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 		maxLimit:       cfg.MaxLimit,
 		maxBodyBytes:   maxBodyBytes,
 		readOnly:       cfg.ReadOnly,
-		authToken:      cfg.AuthToken,
+		authenticator:  auth,
 		corsOrigins:    cfg.CORSOrigins,
 		timeout:        cfg.Timeout,
 	}, nil
+}
+
+// newAuthenticator selects the request authenticator from the auth config.
+// static gates the API behind the resolved shared Bearer token; oidc validates
+// JWTs against the issuer (discovering the JWKS now, so a bad issuer fails
+// startup rather than every request); any other mode keeps it fully open.
+func newAuthenticator(auth config.Auth) (Authenticator, error) {
+	switch auth.Mode {
+	case config.AuthModeNone, "":
+		// The empty zero value means "unset", which is open — same as none.
+		return noneAuth{}, nil
+	case config.AuthModeStatic:
+		return newStaticTokenAuth(auth.Token), nil
+	case config.AuthModeOIDC:
+		return newOIDCAuth(auth.OIDC)
+	default:
+		// config.buildAuth rejects unknown modes, so this is unreachable via
+		// the config path. Fail closed rather than silently serving an open
+		// API if a caller ever constructs an unexpected mode directly.
+		return nil, fmt.Errorf("unknown auth mode %q", auth.Mode)
+	}
 }
 
 func (s *Server) Run(ctx context.Context) error {
