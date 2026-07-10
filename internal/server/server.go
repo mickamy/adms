@@ -30,6 +30,7 @@ type Server struct {
 	maxLimit       int
 	maxBodyBytes   int64
 	readOnly       bool
+	authConfig     config.Auth
 	authenticator  Authenticator
 	corsOrigins    []string
 	timeout        time.Duration
@@ -97,11 +98,6 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 		return nil, fmt.Errorf("server: %w", err)
 	}
 
-	auth, err := newAuthenticator(cfg.Auth)
-	if err != nil {
-		return nil, fmt.Errorf("server: %w", err)
-	}
-
 	return &Server{
 		addr:           cfg.Listen,
 		db:             db,
@@ -113,7 +109,7 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 		maxLimit:       cfg.MaxLimit,
 		maxBodyBytes:   maxBodyBytes,
 		readOnly:       cfg.ReadOnly,
-		authenticator:  auth,
+		authConfig:     cfg.Auth,
 		corsOrigins:    cfg.CORSOrigins,
 		timeout:        cfg.Timeout,
 	}, nil
@@ -122,8 +118,10 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 // newAuthenticator selects the request authenticator from the auth config.
 // static gates the API behind the resolved shared Bearer token; oidc validates
 // JWTs against the issuer (discovering the JWKS now, so a bad issuer fails
-// startup rather than every request); any other mode keeps it fully open.
-func newAuthenticator(auth config.Auth) (Authenticator, error) {
+// startup rather than every request); any other mode keeps it fully open. ctx
+// bounds the oidc discovery round-trip and is retained for background JWKS
+// refresh, so it must outlive startup (Prepare passes the server-lifetime ctx).
+func newAuthenticator(ctx context.Context, auth config.Auth) (Authenticator, error) {
 	switch auth.Mode {
 	case config.AuthModeNone, "":
 		// The empty zero value means "unset", which is open — same as none.
@@ -131,7 +129,7 @@ func newAuthenticator(auth config.Auth) (Authenticator, error) {
 	case config.AuthModeStatic:
 		return newStaticTokenAuth(auth.Token), nil
 	case config.AuthModeOIDC:
-		return newOIDCAuth(auth.OIDC)
+		return newOIDCAuth(ctx, auth.OIDC)
 	default:
 		// config.buildAuth rejects unknown modes, so this is unreachable via
 		// the config path. Fail closed rather than silently serving an open
@@ -228,10 +226,21 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 	}
 }
 
-// prepare introspects the schema, applies the table allowlist, and marshals
-// the schema to JSON once so the schema handler can serve bytes without
-// re-encoding on every request.
+// prepare builds the authenticator, introspects the schema, applies the table
+// allowlist, and marshals the schema to JSON once so the schema handler can
+// serve bytes without re-encoding on every request. The authenticator is built
+// here, rather than in New, because oidc mode discovers the issuer over the
+// network: passing the server-lifetime ctx keeps that call cancelable (so a
+// hung issuer does not swallow shutdown signals) while still outliving startup
+// for background JWKS refresh.
 func (s *Server) prepare(ctx context.Context) error {
+	auth, err := newAuthenticator(ctx, s.authConfig)
+	if err != nil {
+		return fmt.Errorf("authenticator: %w", err)
+	}
+
+	s.authenticator = auth
+
 	prepCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 

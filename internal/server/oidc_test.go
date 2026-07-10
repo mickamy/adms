@@ -62,7 +62,7 @@ func TestOIDCAuth_Verification(t *testing.T) {
 
 	idp := newMockIDP(t, key)
 
-	auth, err := server.NewOIDCAuth(config.OIDC{
+	auth, err := server.NewOIDCAuth(t.Context(), config.OIDC{
 		Issuer:     idp.URL,
 		Audience:   "adms",
 		RolesClaim: "roles",
@@ -145,7 +145,7 @@ func TestOIDCAuth_Verification(t *testing.T) {
 func TestNewOIDCAuth_UnreachableIssuerFails(t *testing.T) {
 	t.Parallel()
 
-	_, err := server.NewOIDCAuth(config.OIDC{
+	_, err := server.NewOIDCAuth(t.Context(), config.OIDC{
 		Issuer:   "http://127.0.0.1:1/does-not-exist",
 		Audience: "adms",
 	})

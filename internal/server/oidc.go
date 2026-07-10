@@ -14,10 +14,12 @@ import (
 
 var _ Authenticator = oidcAuth{}
 
-// oidcDiscoveryTimeout bounds both the startup discovery round-trip and every
-// later JWKS refresh. It is enforced via the HTTP client rather than a
-// cancelable context because go-oidc retains the provider's context for
-// background key rotation, so that context must outlive startup.
+// oidcDiscoveryTimeout caps both the startup discovery round-trip and every
+// later JWKS refresh. It is enforced via the HTTP client's timeout, layered on
+// top of the caller's context: the context makes discovery cancelable (so a
+// hung issuer does not block shutdown), while the client timeout bounds each
+// request even though go-oidc retains that same context for background key
+// rotation over the server's lifetime.
 const oidcDiscoveryTimeout = 10 * time.Second
 
 // oidcAuth validates OIDC/JWT bearer tokens. The verifier checks the
@@ -28,11 +30,11 @@ type oidcAuth struct {
 	rolesClaim string
 }
 
-func newOIDCAuth(cfg config.OIDC) (oidcAuth, error) {
+func newOIDCAuth(ctx context.Context, cfg config.OIDC) (oidcAuth, error) {
 	client := &http.Client{Timeout: oidcDiscoveryTimeout}
-	ctx := oidc.ClientContext(context.Background(), client)
+	providerCtx := oidc.ClientContext(ctx, client)
 
-	provider, err := oidc.NewProvider(ctx, cfg.Issuer)
+	provider, err := oidc.NewProvider(providerCtx, cfg.Issuer)
 	if err != nil {
 		return oidcAuth{}, fmt.Errorf("oidc: discover issuer %q: %w", cfg.Issuer, err)
 	}
