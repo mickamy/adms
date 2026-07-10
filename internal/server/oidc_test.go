@@ -67,7 +67,7 @@ func TestOIDCAuth_Verification(t *testing.T) {
 		Issuer:     idp.URL,
 		Audience:   "adms",
 		RolesClaim: "roles",
-	})
+	}, 5*time.Second)
 	if err != nil {
 		t.Fatalf("NewOIDCAuth: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestNewOIDCAuth_UnreachableIssuerFails(t *testing.T) {
 	_, err := server.NewOIDCAuth(t.Context(), config.OIDC{
 		Issuer:   "http://127.0.0.1:1/does-not-exist",
 		Audience: "adms",
-	})
+	}, 5*time.Second)
 	if err == nil {
 		t.Fatal("NewOIDCAuth error = nil, want a discovery failure (fail-closed)")
 	}

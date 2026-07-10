@@ -576,7 +576,7 @@ The full set of fields, with defaults and meaning:
 | `read_only`             | `false`            | Reject all write methods with `403`                            |
 | `allowed_schemas`       | _(driver default)_ | Schemas to introspect                                          |
 | `allowed_tables`        | _(all)_            | Table allowlist (empty means every introspected table)         |
-| `timeout`               | `30s`              | Startup operation timeout (DSN parsing, introspect, etc.)      |
+| `timeout`               | `30s`              | Per-operation timeout (DSN parsing, introspect, OIDC discovery / JWKS) |
 | `cors_origins`          | _(none)_           | Allowed origins for CORS                                       |
 | `auth.mode`             | `none`             | `none` (open), `static` (shared bearer token), or `oidc` (JWT) |
 | `auth.static.token_env` | _(none)_           | Name of the env var holding the bearer token (`mode: static`)  |

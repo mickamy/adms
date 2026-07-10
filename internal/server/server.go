@@ -120,8 +120,9 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 // JWTs against the issuer (discovering the JWKS now, so a bad issuer fails
 // startup rather than every request); any other mode keeps it fully open. ctx
 // bounds the oidc discovery round-trip and is retained for background JWKS
-// refresh, so it must outlive startup (Prepare passes the server-lifetime ctx).
-func newAuthenticator(ctx context.Context, auth config.Auth) (Authenticator, error) {
+// refresh, so it must outlive startup (Prepare passes the server-lifetime ctx);
+// timeout caps each discovery/refresh request.
+func newAuthenticator(ctx context.Context, auth config.Auth, timeout time.Duration) (Authenticator, error) {
 	switch auth.Mode {
 	case config.AuthModeNone, "":
 		// The empty zero value means "unset", which is open — same as none.
@@ -129,7 +130,7 @@ func newAuthenticator(ctx context.Context, auth config.Auth) (Authenticator, err
 	case config.AuthModeStatic:
 		return newStaticTokenAuth(auth.Token), nil
 	case config.AuthModeOIDC:
-		return newOIDCAuth(ctx, auth.OIDC)
+		return newOIDCAuth(ctx, auth.OIDC, timeout)
 	default:
 		// config.buildAuth rejects unknown modes, so this is unreachable via
 		// the config path. Fail closed rather than silently serving an open
@@ -234,7 +235,7 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 // hung issuer does not swallow shutdown signals) while still outliving startup
 // for background JWKS refresh.
 func (s *Server) prepare(ctx context.Context) error {
-	auth, err := newAuthenticator(ctx, s.authConfig)
+	auth, err := newAuthenticator(ctx, s.authConfig, s.timeout)
 	if err != nil {
 		return fmt.Errorf("authenticator: %w", err)
 	}
