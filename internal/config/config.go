@@ -205,6 +205,15 @@ func buildAuth(a authConfig) (Auth, error) {
 		return Auth{}, fmt.Errorf("invalid auth.mode %q (want none, static, or oidc)", a.Mode)
 	}
 
+	// Fail closed on a mode/settings mismatch: auth settings present under a
+	// none mode almost always mean the operator forgot (or mistyped) auth.mode
+	// and would otherwise ship a silently open API.
+	if mode == AuthModeNone && hasAuthSettings(a) {
+		return Auth{}, fmt.Errorf(
+			"auth.mode is %q (open) but auth.static or auth.oidc is configured; "+
+				"set auth.mode to \"static\" or \"oidc\" to enable it", mode)
+	}
+
 	if mode == AuthModeStatic && a.Static.TokenEnv == "" {
 		return Auth{}, errors.New("auth.static.token_env is required when auth.mode is static")
 	}
@@ -228,6 +237,15 @@ func buildAuth(a authConfig) (Auth, error) {
 			RolesClaim: a.OIDC.RolesClaim,
 		},
 	}, nil
+}
+
+// hasAuthSettings reports whether any static or oidc setting is populated,
+// regardless of mode.
+func hasAuthSettings(a authConfig) bool {
+	return a.Static.TokenEnv != "" ||
+		a.OIDC.Issuer != "" ||
+		a.OIDC.Audience != "" ||
+		a.OIDC.RolesClaim != ""
 }
 
 func parseDriver(s string) (database.Driver, error) {

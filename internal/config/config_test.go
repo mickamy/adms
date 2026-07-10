@@ -428,6 +428,38 @@ auth:
 			},
 		},
 		{
+			name:     "auth static settings without mode are rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  static:
+    token_env: ADMS_TOKEN`,
+			wantErr: "auth.mode",
+		},
+		{
+			name:     "auth oidc settings without mode are rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  oidc:
+    issuer: https://issuer.example.com/
+    audience: adms`,
+			wantErr: "auth.mode",
+		},
+		{
+			name:     "auth mode none with settings is rejected",
+			filename: "adms.yaml",
+			body: `driver: postgres
+dsn: x
+auth:
+  mode: none
+  static:
+    token_env: ADMS_TOKEN`,
+			wantErr: "auth.mode",
+		},
+		{
 			name:     "auth mode oidc requires issuer",
 			filename: "adms.yaml",
 			body: `driver: postgres
