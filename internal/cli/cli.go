@@ -64,6 +64,11 @@ func Run(args []string, _, stderr io.Writer) int {
 
 	if cfg.UI.Enabled {
 		cfg.CORSOrigins = append(cfg.CORSOrigins, uiCORSOrigins(cfg.UI.Listen)...)
+
+		if cfg.Auth.Mode == config.AuthModeOIDC {
+			logger.Warn(sigCtx, "auth.mode is oidc: the bundled UI does not attach a bearer token; "+
+				"front it with a gateway that injects Authorization, or its API calls will get 401")
+		}
 	}
 
 	srv, err := server.New(cfg, db.DB)

@@ -517,6 +517,11 @@ array or a space-separated string); it is surfaced on the request principal for 
 unreachable issuer fails startup rather than silently serving an open API. adms itself has no login flow — obtain
 tokens from your identity provider (Auth0, Cognito, Keycloak, …) and present them as bearer tokens.
 
+The bundled UI has no token to forward in this mode (there is no shared secret), so front it with a gateway
+(oauth2-proxy, Cloudflare Access, GCP IAP, ALB OIDC) that terminates OIDC and injects `Authorization` on requests to
+the API; otherwise the UI's own API calls will be rejected with `401`. adms logs a warning at startup when `ui.enabled`
+is combined with `auth.mode: oidc`.
+
 ### CORS
 
 ```yaml
