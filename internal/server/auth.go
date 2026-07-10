@@ -53,7 +53,9 @@ const principalKey contextKey = iota
 func authenticate(a Authenticator, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isHealthzPath(r.URL.Path) {
-			next.ServeHTTP(w, r)
+			// healthz needs no credentials, but still carry an anonymous
+			// Principal so every request reaching a handler has one.
+			serveWithPrincipal(next, w, r, Principal{})
 
 			return
 		}
@@ -65,9 +67,13 @@ func authenticate(a Authenticator, next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), principalKey, p)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		serveWithPrincipal(next, w, r, p)
 	})
+}
+
+func serveWithPrincipal(next http.Handler, w http.ResponseWriter, r *http.Request, p Principal) {
+	ctx := context.WithValue(r.Context(), principalKey, p)
+	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
 func writeAuthError(w http.ResponseWriter, r *http.Request, err error) {

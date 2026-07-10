@@ -224,8 +224,12 @@ func TestAuthenticate_HealthzBypassesAuth(t *testing.T) {
 			t.Parallel()
 
 			var called atomic.Bool
-			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				called.Store(true)
+
+				if _, ok := server.PrincipalFrom(r.Context()); !ok {
+					t.Error("healthz bypass should still attach a Principal to the context")
+				}
 
 				_, _ = io.WriteString(w, "ok")
 			})
