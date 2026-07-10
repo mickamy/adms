@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func TestExtractRoles(t *testing.T) {
 			t.Parallel()
 
 			got := server.ExtractRoles(tc.claims, tc.claim)
-			if !equalStringSlice(got, tc.want) {
+			if !slices.Equal(got, tc.want) {
 				t.Errorf("ExtractRoles(%v, %q) = %v, want %v", tc.claims, tc.claim, got, tc.want)
 			}
 		})
@@ -83,7 +84,7 @@ func TestOIDCAuth_Verification(t *testing.T) {
 			t.Errorf("Subject = %q, want %q", p.Subject, "user-123")
 		}
 
-		if !equalStringSlice(p.Roles, []string{"viewer", "support"}) {
+		if !slices.Equal(p.Roles, []string{"viewer", "support"}) {
 			t.Errorf("Roles = %v, want [viewer support]", p.Roles)
 		}
 	})
@@ -96,7 +97,7 @@ func TestOIDCAuth_Verification(t *testing.T) {
 		token := signJWT(t, key, claims)
 
 		p := requireAuthenticated(t, auth, token)
-		if !equalStringSlice(p.Roles, []string{"viewer", "support"}) {
+		if !slices.Equal(p.Roles, []string{"viewer", "support"}) {
 			t.Errorf("Roles = %v, want [viewer support]", p.Roles)
 		}
 	})
@@ -296,18 +297,4 @@ func signJWT(t *testing.T, key *rsa.PrivateKey, claims map[string]any) string {
 	}
 
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig)
-}
-
-func equalStringSlice(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-
-	return true
 }
