@@ -1383,7 +1383,7 @@ func newTestUIServerWithToken(t *testing.T, sch schema.Schema, token string) *ht
 	t.Helper()
 
 	srv, err := ui.New(
-		config.Config{UI: config.UIConfig{Listen: ":0"}, AuthToken: token},
+		config.Config{UI: config.UIConfig{Listen: ":0"}, Auth: config.Auth{Token: token}},
 		sch, apiOrigin,
 	)
 	if err != nil {

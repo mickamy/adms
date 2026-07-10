@@ -27,8 +27,12 @@ func NewWithIntrospector(
 var (
 	Recoverer            = recoverer
 	Logging              = logging
-	AuthBearer           = authBearer
+	Authenticate         = authenticate
+	NewStaticTokenAuth   = newStaticTokenAuth
+	NewOIDCAuth          = newOIDCAuth
+	ExtractRoles         = extractRoles
 	BearerToken          = bearerToken
+	PrincipalFrom        = principalFrom
 	Cors                 = cors
 	NormalizeScanValue   = normalizeScanValue
 	WantsCSV             = wantsCSV
@@ -50,6 +54,8 @@ const (
 )
 
 type PreferDirective = preferDirective
+
+type NoneAuth = noneAuth
 
 func WriteProblem(
 	w http.ResponseWriter,

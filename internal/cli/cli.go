@@ -37,7 +37,7 @@ func Run(args []string, _, stderr io.Writer) int {
 		return exit.Usage
 	}
 
-	if err := resolveAuthToken(&cfg); err != nil {
+	if err := resolveAuth(&cfg); err != nil {
 		fmt.Fprintf(stderr, "adms: %v\n", err)
 
 		return exit.Usage
@@ -64,6 +64,11 @@ func Run(args []string, _, stderr io.Writer) int {
 
 	if cfg.UI.Enabled {
 		cfg.CORSOrigins = append(cfg.CORSOrigins, uiCORSOrigins(cfg.UI.Listen)...)
+
+		if cfg.Auth.Mode == config.AuthModeOIDC {
+			logger.Warn(sigCtx, "auth.mode is oidc: the bundled UI does not attach a bearer token; "+
+				"front it with a gateway that injects Authorization, or its API calls will get 401")
+		}
 	}
 
 	srv, err := server.New(cfg, db.DB)
@@ -170,21 +175,22 @@ func resolveConfigPath(args []string) (string, error) {
 	}
 }
 
-// resolveAuthToken fails fast if AuthTokenEnv is set but unresolved, so
-// opting into auth cannot silently serve an open API.
-func resolveAuthToken(cfg *config.Config) error {
-	if cfg.AuthTokenEnv == "" {
+// resolveAuth reads the static bearer token from its env var when auth.mode is
+// static. It fails fast if the variable is unset, so opting into static auth
+// cannot silently serve an open API. Other modes need no startup resolution.
+func resolveAuth(cfg *config.Config) error {
+	if cfg.Auth.Mode != config.AuthModeStatic {
 		return nil
 	}
 
-	tok := os.Getenv(cfg.AuthTokenEnv)
+	tok := os.Getenv(cfg.Auth.TokenEnv)
 	if tok == "" {
 		return fmt.Errorf(
-			"auth_token_env %q is set but the environment variable is empty or unset",
-			cfg.AuthTokenEnv)
+			"auth.static.token_env %q is set but the environment variable is empty or unset",
+			cfg.Auth.TokenEnv)
 	}
 
-	cfg.AuthToken = tok
+	cfg.Auth.Token = tok
 
 	return nil
 }

@@ -30,7 +30,8 @@ type Server struct {
 	maxLimit       int
 	maxBodyBytes   int64
 	readOnly       bool
-	authToken      string
+	authConfig     config.Auth
+	authenticator  Authenticator
 	corsOrigins    []string
 	timeout        time.Duration
 
@@ -108,10 +109,34 @@ func newServer(cfg config.Config, db *sql.DB, intro schema.Introspector) (*Serve
 		maxLimit:       cfg.MaxLimit,
 		maxBodyBytes:   maxBodyBytes,
 		readOnly:       cfg.ReadOnly,
-		authToken:      cfg.AuthToken,
+		authConfig:     cfg.Auth,
 		corsOrigins:    cfg.CORSOrigins,
 		timeout:        cfg.Timeout,
 	}, nil
+}
+
+// newAuthenticator selects the request authenticator from the auth config.
+// static gates the API behind the resolved shared Bearer token; oidc validates
+// JWTs against the issuer (discovering the JWKS now, so a bad issuer fails
+// startup rather than every request); any other mode keeps it fully open. ctx
+// bounds the oidc discovery round-trip and is retained for background JWKS
+// refresh, so it must outlive startup (Prepare passes the server-lifetime ctx);
+// timeout caps each discovery/refresh request.
+func newAuthenticator(ctx context.Context, auth config.Auth, timeout time.Duration) (Authenticator, error) {
+	switch auth.Mode {
+	case config.AuthModeNone, "":
+		// The empty zero value means "unset", which is open — same as none.
+		return noneAuth{}, nil
+	case config.AuthModeStatic:
+		return newStaticTokenAuth(auth.Token), nil
+	case config.AuthModeOIDC:
+		return newOIDCAuth(ctx, auth.OIDC, timeout)
+	default:
+		// config.buildAuth rejects unknown modes, so this is unreachable via
+		// the config path. Fail closed rather than silently serving an open
+		// API if a caller ever constructs an unexpected mode directly.
+		return nil, fmt.Errorf("unknown auth mode %q", auth.Mode)
+	}
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -202,10 +227,21 @@ func (s *Server) serve(ctx context.Context, ln net.Listener) error {
 	}
 }
 
-// prepare introspects the schema, applies the table allowlist, and marshals
-// the schema to JSON once so the schema handler can serve bytes without
-// re-encoding on every request.
+// prepare builds the authenticator, introspects the schema, applies the table
+// allowlist, and marshals the schema to JSON once so the schema handler can
+// serve bytes without re-encoding on every request. The authenticator is built
+// here, rather than in New, because oidc mode discovers the issuer over the
+// network: passing the server-lifetime ctx keeps that call cancelable (so a
+// hung issuer does not swallow shutdown signals) while still outliving startup
+// for background JWKS refresh.
 func (s *Server) prepare(ctx context.Context) error {
+	auth, err := newAuthenticator(ctx, s.authConfig, s.timeout)
+	if err != nil {
+		return fmt.Errorf("authenticator: %w", err)
+	}
+
+	s.authenticator = auth
+
 	prepCtx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
